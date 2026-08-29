@@ -1,0 +1,624 @@
+/*
+ * Welcome page — scoped styles.
+ * Everything is namespaced under .page so authenticated / auth screens are
+ * untouched. Palette taken from the existing AuraFlo brand.
+ */
+
+.page {
+  --navy-950: #050d18;
+  --navy-900: #081321;
+  --navy-800: #0c192a;
+  --navy-700: #17273b;
+  --gold: #d9b25f;
+  --gold-light: #f0d18b;
+  --cream: #fffdf7;
+  --text-secondary: rgba(255, 253, 247, 0.68);
+  --text-quiet: rgba(255, 253, 247, 0.45);
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-soft: rgba(255, 255, 255, 0.06);
+
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background-color: var(--navy-950);
+  background-image:
+    radial-gradient(
+      1100px 620px at 76% 40%,
+      rgba(217, 178, 95, 0.1),
+      transparent 62%
+    ),
+    radial-gradient(
+      820px 520px at 6% 4%,
+      rgba(120, 150, 190, 0.06),
+      transparent 55%
+    ),
+    linear-gradient(158deg, var(--navy-700) 0%, var(--navy-800) 46%, var(--navy-950) 100%);
+  color: var(--cream);
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.inner {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem);
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding: 18px;
+  }
+  .frame {
+    min-height: calc(100dvh - 36px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    overflow: clip;
+  }
+}
+
+.page a:focus-visible,
+.page button:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Brand wordmark ---------------------------------------------------- */
+
+.brand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  text-decoration: none;
+}
+
+.brandName {
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.065em;
+  line-height: 1;
+  font-size: 1.35rem;
+  white-space: nowrap;
+}
+
+.brandSm .brandName {
+  font-size: 1.12rem;
+}
+
+.brandAura {
+  color: #fffdf7;
+  font-weight: 600;
+}
+
+.brandFlo {
+  color: #d9b25f;
+  font-weight: 500;
+}
+
+.brandRule {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .brandRule {
+    display: block;
+    width: 30px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--gold), rgba(217, 178, 95, 0));
+  }
+}
+
+/* --- Header ---------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(1.1rem, 2.6vw, 1.7rem) 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.9rem, 2.5vw, 1.5rem);
+}
+
+.navLink {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.navLink:hover {
+  color: var(--cream);
+}
+
+/* --- Buttons / links ------------------------------------------------- */
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 1.45rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--gold);
+  color: #1c1305;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.btnPrimary:hover {
+  background: var(--gold-light);
+  transform: translateY(-1px);
+}
+
+.btnPrimary:active {
+  transform: translateY(0);
+}
+
+.btnPrimarySm {
+  padding: 0.55rem 1.05rem;
+  font-size: 0.85rem;
+  border-radius: 7px;
+}
+
+.secondaryLink {
+  color: var(--cream);
+  font-size: 0.95rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  padding-bottom: 2px;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.secondaryLink:hover {
+  color: var(--gold-light);
+  border-color: var(--gold);
+}
+
+/* --- Hero ----------------------------------------------------------- */
+
+.hero {
+  display: grid;
+  gap: clamp(2.75rem, 6vw, 4.5rem);
+  align-items: center;
+  padding: clamp(2.5rem, 7vw, 5rem) 0 clamp(3rem, 7vw, 5rem);
+}
+
+@media (min-width: 960px) {
+  .hero {
+    grid-template-columns: 1.02fr 0.98fr;
+  }
+}
+
+.heroCopy {
+  max-width: 34rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gold), rgba(217, 178, 95, 0));
+}
+
+.headline {
+  margin: 0.95rem 0 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  font-size: clamp(2.15rem, 5.2vw, 3.5rem);
+  color: var(--cream);
+  white-space: pre-line;
+}
+
+.sub {
+  margin: 1.2rem 0 0;
+  max-width: 30rem;
+  font-size: clamp(1rem, 1.35vw, 1.075rem);
+  line-height: 1.62;
+  color: var(--text-secondary);
+}
+
+.actions {
+  margin-top: 1.9rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+/* --- Flow illustration -------------------------------------------- */
+
+.story {
+  position: relative;
+  container-type: inline-size;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.storyGlow {
+  position: absolute;
+  inset: -8% -4% -8% 4%;
+  background: radial-gradient(
+    58% 58% at 58% 46%,
+    rgba(217, 178, 95, 0.14),
+    transparent 70%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+
+.storyGrid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1.5rem;
+  padding: 8px 6px;
+}
+
+@container (min-width: 460px) {
+  .storyGrid {
+    grid-template-columns: 1fr 1.06fr;
+    align-items: center;
+    gap: 1.25rem;
+  }
+}
+
+.storyCol {
+  position: relative;
+  z-index: 1;
+}
+
+.onMindLabel,
+.todayKicker {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.onMindLabel {
+  display: block;
+  margin-bottom: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.thoughts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-right: 0.5rem;
+}
+
+.thought {
+  position: relative;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.58rem 0.85rem 0.58rem 1.05rem;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: rgba(255, 253, 247, 0.9);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.thought::before {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 0.95rem;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0.7;
+}
+
+.thought:nth-child(1) {
+  width: 92%;
+  transform: rotate(-1deg);
+}
+
+.thought:nth-child(2) {
+  width: 96%;
+  margin-left: 0.5rem;
+  transform: rotate(0.6deg);
+}
+
+.thought:nth-child(3) {
+  width: 84%;
+  transform: rotate(-0.4deg);
+}
+
+.thought:hover {
+  transform: translateY(-2px) rotate(0);
+  border-color: rgba(217, 178, 95, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.thoughtMeta {
+  display: block;
+  margin-top: 0.22rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: var(--text-quiet);
+}
+
+.connector {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.connectorV {
+  justify-self: center;
+  width: 1px;
+  height: 26px;
+  background: linear-gradient(
+    180deg,
+    rgba(217, 178, 95, 0),
+    var(--gold),
+    rgba(217, 178, 95, 0)
+  );
+}
+
+@container (min-width: 460px) {
+  .connector {
+    display: block;
+  }
+  .connectorV {
+    display: none;
+  }
+}
+
+.flowPath {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 4 7;
+  opacity: 0.75;
+  vector-effect: non-scaling-stroke;
+  animation: auraFlow 7s linear infinite;
+}
+
+@keyframes auraFlow {
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+
+.today {
+  position: relative;
+  z-index: 1;
+  padding: 1.3rem 1.3rem 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.02)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 32px -22px rgba(0, 0, 0, 0.55);
+}
+
+.todayKicker {
+  color: var(--gold);
+}
+
+.todayTitle {
+  margin: 0.32rem 0 1rem;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+}
+
+.priorityRow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.62rem 0;
+  font-size: 0.88rem;
+  color: rgba(255, 253, 247, 0.82);
+}
+
+.priorityRow + .priorityRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.check {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1.5px solid rgba(255, 253, 247, 0.35);
+  border-radius: 50%;
+}
+
+.priorityRow:first-of-type .check {
+  border-color: var(--gold);
+}
+
+.priorityRow:first-of-type .check::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+/* --- Steps --------------------------------------------------------- */
+
+.steps {
+  padding: clamp(2.5rem, 6vw, 4rem) 0;
+  border-top: 1px solid var(--hair);
+}
+
+.stepsGrid {
+  display: grid;
+  gap: 1.75rem;
+}
+
+@media (min-width: 760px) {
+  .stepsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(1.5rem, 4vw, 3rem);
+  }
+  .step + .step {
+    padding-left: clamp(1.5rem, 4vw, 3rem);
+    border-left: 1px solid var(--hair);
+  }
+}
+
+@media (max-width: 759px) {
+  .step + .step {
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--hair);
+  }
+}
+
+.stepNum {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+}
+
+.stepTitle {
+  margin: 0.5rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cream);
+}
+
+.stepBody {
+  max-width: 22rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* --- Closing ------------------------------------------------------ */
+
+.closing {
+  padding: clamp(3rem, 7vw, 5rem) 0 clamp(3.5rem, 8vw, 6rem);
+  border-top: 1px solid var(--hair);
+}
+
+.closingLine {
+  max-width: 32rem;
+  font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--cream);
+}
+
+.closingActions {
+  margin-top: 1.65rem;
+}
+
+/* --- Motion ------------------------------------------------------ */
+
+.reveal {
+  opacity: 0;
+  animation: auraRise 0.55s cubic-bezier(0.2, 0.65, 0.2, 1) forwards;
+}
+
+.d1 {
+  animation-delay: 0.05s;
+}
+.d2 {
+  animation-delay: 0.13s;
+}
+.d3 {
+  animation-delay: 0.22s;
+}
+.d4 {
+  animation-delay: 0.32s;
+}
+.d5 {
+  animation-delay: 0.44s;
+}
+
+@keyframes auraRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    animation: none;
+  }
+  .flowPath {
+    animation: none;
+  }
+  .btnPrimary,
+  .thought,
+  .secondaryLink,
+  .navLink {
+    transition: none;
+  }
+}
