@@ -1,26 +1,73 @@
 @import "tailwindcss";
 
+/*
+ * AuraFlo — calm, human productivity styling.
+ * Warm off-white ground, evergreen primary, amber accent. One light theme.
+ */
+
+@theme {
+  --color-canvas: #f6f3ee;
+  --color-surface: #fffdf9;
+  --color-surface-sunken: #efe9df;
+  --color-border: #e3dccd;
+  --color-border-strong: #d3c9b4;
+
+  --color-ink: #23201b;
+  --color-ink-muted: #6c6557;
+  --color-ink-subtle: #8f8676;
+
+  --color-evergreen: #1f5c46;
+  --color-evergreen-hover: #184a38;
+  --color-evergreen-soft: #e4ede8;
+  --color-on-evergreen: #f6f3ee;
+
+  --color-amber: #b9791c;
+  --color-amber-soft: #f6e7cc;
+
+  --color-danger: #a23a2e;
+  --color-danger-soft: #f3ddd8;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --shadow-soft: 0 1px 2px rgb(35 32 27 / 0.04), 0 1px 3px rgb(35 32 27 / 0.06);
+  --shadow-lifted: 0 2px 6px rgb(35 32 27 / 0.06), 0 8px 24px rgb(35 32 27 / 0.08);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible, consistent focus states everywhere. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-evergreen);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background-color: var(--color-amber-soft);
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
