@@ -17,8 +17,8 @@ export function ForgotPasswordForm() {
   if (state?.ok && state.data.sent) {
     return (
       <div className="flex flex-col items-center gap-3 text-center">
-        <MailCheck aria-hidden className="size-8 text-evergreen" />
-        <p className="text-sm text-ink-muted">
+        <MailCheck aria-hidden className="size-8 text-gold-dark" />
+        <p className="text-sm text-muted">
           If an account exists for that email, a reset link is on its way.
           Check your inbox.
         </p>

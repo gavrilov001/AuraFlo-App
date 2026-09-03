@@ -5,27 +5,27 @@ import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "gold";
 type Size = "sm" | "md";
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors " +
-  "disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 " +
-  "focus-visible:outline-offset-2 focus-visible:outline-evergreen";
+  "inline-flex items-center justify-center gap-2 rounded-md font-medium " +
+  "transition-[background-color,border-color,color] duration-150 " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
-  primary:
-    "bg-evergreen text-on-evergreen hover:bg-evergreen-hover disabled:hover:bg-evergreen",
+  primary: "bg-navy-900 text-cream hover:bg-navy-800",
   secondary:
-    "border border-border-strong bg-surface text-ink hover:bg-surface-sunken",
-  ghost: "text-ink-muted hover:bg-surface-sunken hover:text-ink",
+    "border border-line bg-surface text-ink hover:bg-surface-hover hover:border-line-soft",
+  ghost: "text-muted hover:bg-surface-hover hover:text-ink",
   danger:
-    "border border-danger/30 bg-danger-soft text-danger hover:bg-danger hover:text-white",
+    "border border-danger/25 bg-danger-soft text-danger hover:bg-danger hover:text-white",
+  gold: "bg-gold text-navy-900 hover:bg-gold-light",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
+  sm: "h-9 px-3.5 text-sm",
+  md: "h-11 px-5 text-[15px]",
 };
 
 export interface ButtonProps

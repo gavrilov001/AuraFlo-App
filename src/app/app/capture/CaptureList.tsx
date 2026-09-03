@@ -1,194 +1,166 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Archive, Inbox, Pencil, RotateCcw, Trash2, Undo2 } from "lucide-react";
+import {
+  Archive,
+  ArrowUpRight,
+  Copy,
+  Pencil,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/Surface";
-import { FormMessage } from "@/components/ui/FormMessage";
+import { CategoryChip } from "@/components/ui/CategoryChip";
+import { DropdownMenu, type MenuItem } from "@/components/ui/DropdownMenu";
 import { cn } from "@/lib/utils/cn";
 import { formatInTimeZone, formatRelative } from "@/lib/utils/datetime";
 import type { CategoryOption } from "@/lib/data/categories";
-import type { CaptureCounts, CaptureWithCategory } from "@/lib/data/captures";
+import type { CaptureWithCategory } from "@/lib/data/captures";
 import type { CaptureFilter } from "@/lib/validation/captures";
-import { setCaptureStatusAction, updateCaptureAction } from "./actions";
+import { updateCaptureAction } from "./actions";
 
-const FILTERS: { key: CaptureFilter; label: string }[] = [
-  { key: "inbox", label: "Inbox" },
-  { key: "processed", label: "Processed" },
-  { key: "archived", label: "Archived" },
-  { key: "discarded", label: "Discarded" },
-];
-
-interface CaptureListProps {
-  filter: CaptureFilter;
-  captures: CaptureWithCategory[];
-  counts: CaptureCounts;
-  categories: CategoryOption[];
-  timezone: string;
-}
+const DECISION_LABEL: Record<string, string> = {
+  today: "Added to today",
+  scheduled: "Scheduled",
+  delegated: "Delegated",
+  someday: "Kept for later",
+};
 
 export function CaptureList({
   filter,
   captures,
-  counts,
   categories,
   timezone,
-}: CaptureListProps) {
-  const router = useRouter();
-  const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
-  const [listError, setListError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-
-  function runStatusChange(
-    id: string,
-    status: "inbox" | "processed" | "archived" | "discarded",
-    undoLabel?: string,
-  ) {
-    setListError(null);
-    startTransition(async () => {
-      const result = await setCaptureStatusAction({ id, status });
-      if (!result.ok) {
-        setListError(result.error);
-        return;
-      }
-      if (undoLabel) setUndo({ id, label: undoLabel });
-      else setUndo(null);
-      router.refresh();
-    });
-  }
-
-  return (
-    <section aria-label="Captures" className="flex flex-col gap-4">
-      <div
-        role="tablist"
-        aria-label="Filter captures"
-        className="flex flex-wrap gap-1 border-b border-border"
-      >
-        {FILTERS.map(({ key, label }) => {
-          const active = key === filter;
-          return (
-            <Link
-              key={key}
-              href={key === "inbox" ? "/app/capture" : `/app/capture?filter=${key}`}
-              role="tab"
-              aria-selected={active}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-                active
-                  ? "border-evergreen text-evergreen"
-                  : "border-transparent text-ink-muted hover:text-ink",
-              )}
-            >
-              {label}
-              <span className="ml-1.5 text-xs text-ink-subtle">
-                {counts[key]}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-
-      {listError && <FormMessage tone="error">{listError}</FormMessage>}
-
-      {undo && (
-        <div className="flex items-center justify-between rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm">
-          <span className="text-ink-muted">{undo.label}</span>
-          <button
-            type="button"
-            onClick={() => runStatusChange(undo.id, "inbox")}
-            className="inline-flex items-center gap-1 font-medium text-evergreen hover:underline"
-          >
-            <Undo2 aria-hidden className="size-3.5" />
-            Undo
-          </button>
-        </div>
-      )}
-
-      {captures.length === 0 ? (
-        <EmptyState
-          icon={<Inbox aria-hidden className="size-6" />}
-          title={
-            filter === "inbox"
-              ? "Your inbox is clear"
-              : `Nothing ${filter} yet`
-          }
-          description={
-            filter === "inbox"
-              ? "Captured thoughts land here until you sort them."
-              : undefined
-          }
-        />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {captures.map((capture) => (
-            <CaptureRow
-              key={capture.id}
-              capture={capture}
-              categories={categories}
-              timezone={timezone}
-              filter={filter}
-              onArchive={() =>
-                runStatusChange(capture.id, "archived", "Capture archived.")
-              }
-              onDiscard={() =>
-                runStatusChange(capture.id, "discarded", "Capture discarded.")
-              }
-              onRestore={() => runStatusChange(capture.id, "inbox")}
-              onSaved={() => {
-                setUndo(null);
-                router.refresh();
-              }}
-              onError={setListError}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-interface CaptureRowProps {
-  capture: CaptureWithCategory;
-  categories: CategoryOption[];
-  timezone: string;
-  filter: CaptureFilter;
-  onArchive: () => void;
-  onDiscard: () => void;
-  onRestore: () => void;
-  onSaved: () => void;
-  onError: (message: string) => void;
-}
-
-function CaptureRow({
-  capture,
-  categories,
-  timezone,
-  filter,
+  busy,
+  bulkEnabled,
+  selected,
+  onToggleSelect,
   onArchive,
   onDiscard,
   onRestore,
+  onCopyToInbox,
+  onDelete,
+  onOpenTask,
+  taskLoading,
   onSaved,
-  onError,
-}: CaptureRowProps) {
+}: {
+  filter: CaptureFilter;
+  captures: CaptureWithCategory[];
+  categories: CategoryOption[];
+  timezone: string;
+  busy: Set<string>;
+  bulkEnabled: boolean;
+  selected: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onArchive: (id: string) => void;
+  onDiscard: (id: string) => void;
+  onRestore: (id: string) => void;
+  onCopyToInbox: (id: string) => void;
+  onDelete: (id: string) => void;
+  onOpenTask: (taskId: string) => void;
+  taskLoading: boolean;
+  onSaved: () => void;
+}) {
+  return (
+    <ul className="divide-y divide-line-soft overflow-hidden rounded-lg border border-line bg-surface">
+      {captures.map((c) =>
+        c.id.startsWith("temp-") ? (
+          <li key={c.id} className="px-4 py-3 opacity-60">
+            <p className="whitespace-pre-wrap break-words text-[14px] text-body">
+              {c.content}
+            </p>
+            <p className="mt-1 text-[12px] text-faint">Saving…</p>
+          </li>
+        ) : (
+          <CaptureItem
+            key={c.id}
+            capture={c}
+            filter={filter}
+            categories={categories}
+            timezone={timezone}
+            pending={busy.has(c.id)}
+            bulkEnabled={bulkEnabled}
+            checked={selected.has(c.id)}
+            onToggleSelect={() => onToggleSelect(c.id)}
+            onArchive={() => onArchive(c.id)}
+            onDiscard={() => onDiscard(c.id)}
+            onRestore={() => onRestore(c.id)}
+            onCopyToInbox={() => onCopyToInbox(c.id)}
+            onDelete={() => onDelete(c.id)}
+            onOpenTask={onOpenTask}
+            taskLoading={taskLoading}
+            onSaved={onSaved}
+          />
+        ),
+      )}
+    </ul>
+  );
+}
+
+function CaptureItem({
+  capture,
+  filter,
+  categories,
+  timezone,
+  pending,
+  bulkEnabled,
+  checked,
+  onToggleSelect,
+  onArchive,
+  onDiscard,
+  onRestore,
+  onCopyToInbox,
+  onDelete,
+  onOpenTask,
+  taskLoading,
+  onSaved,
+}: {
+  capture: CaptureWithCategory;
+  filter: CaptureFilter;
+  categories: CategoryOption[];
+  timezone: string;
+  pending: boolean;
+  bulkEnabled: boolean;
+  checked: boolean;
+  onToggleSelect: () => void;
+  onArchive: () => void;
+  onDiscard: () => void;
+  onRestore: () => void;
+  onCopyToInbox: () => void;
+  onDelete: () => void;
+  onOpenTask: (taskId: string) => void;
+  taskLoading: boolean;
+  onSaved: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(capture.content);
   const [categoryId, setCategoryId] = useState(capture.category_id ?? "");
   const [isPending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  const canEdit = filter === "inbox" || filter === "processed";
+  const stamp =
+    filter === "inbox"
+      ? capture.captured_at
+      : filter === "archived"
+        ? capture.archived_at ?? capture.processed_at
+        : filter === "discarded"
+          ? capture.discarded_at ?? capture.processed_at
+          : capture.processed_at ?? capture.captured_at;
 
   function save() {
     if (!content.trim()) return;
+    setErr(null);
     startTransition(async () => {
-      const result = await updateCaptureAction({
+      const r = await updateCaptureAction({
         id: capture.id,
         content: content.trim(),
         notes: capture.notes,
         categoryId: categoryId || null,
       });
-      if (!result.ok) {
-        onError(result.error);
+      if (!r.ok) {
+        setErr(r.error);
         return;
       }
       setEditing(false);
@@ -196,31 +168,106 @@ function CaptureRow({
     });
   }
 
+  const menu: MenuItem[] = [];
+  if (canEdit) {
+    menu.push({
+      label: "Edit",
+      icon: <Pencil aria-hidden className="size-3.5" />,
+      onClick: () => setEditing(true),
+    });
+  }
+  if (filter === "inbox") {
+    menu.push(
+      {
+        label: "Archive",
+        icon: <Archive aria-hidden className="size-3.5" />,
+        onClick: onArchive,
+      },
+      {
+        label: "Discard",
+        icon: <Trash2 aria-hidden className="size-3.5" />,
+        onClick: onDiscard,
+        danger: true,
+      },
+    );
+  }
+  if (filter === "processed") {
+    menu.push(
+      {
+        label: "Copy to Inbox",
+        icon: <Copy aria-hidden className="size-3.5" />,
+        onClick: onCopyToInbox,
+      },
+      {
+        label: "Archive source",
+        icon: <Archive aria-hidden className="size-3.5" />,
+        onClick: onArchive,
+      },
+    );
+  }
+  if (filter === "archived") {
+    menu.push(
+      {
+        label: "Restore",
+        icon: <RotateCcw aria-hidden className="size-3.5" />,
+        onClick: onRestore,
+      },
+      {
+        label: "Copy to Inbox",
+        icon: <Copy aria-hidden className="size-3.5" />,
+        onClick: onCopyToInbox,
+      },
+      {
+        label: "Delete permanently",
+        icon: <Trash2 aria-hidden className="size-3.5" />,
+        onClick: onDelete,
+        danger: true,
+      },
+    );
+  }
+  if (filter === "discarded") {
+    menu.push(
+      {
+        label: "Restore to Inbox",
+        icon: <RotateCcw aria-hidden className="size-3.5" />,
+        onClick: onRestore,
+      },
+      {
+        label: "Archive",
+        icon: <Archive aria-hidden className="size-3.5" />,
+        onClick: onArchive,
+      },
+      {
+        label: "Delete permanently",
+        icon: <Trash2 aria-hidden className="size-3.5" />,
+        onClick: onDelete,
+        danger: true,
+      },
+    );
+  }
+
   if (editing) {
     return (
-      <li className="rounded-md border border-border-strong bg-surface p-3 shadow-soft">
-        <label className="sr-only" htmlFor={`edit-${capture.id}`}>
-          Edit capture
-        </label>
+      <li className="px-4 py-3">
         <textarea
-          id={`edit-${capture.id}`}
           value={content}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(e) => setContent(e.target.value)}
           rows={3}
-          className="w-full resize-y rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-ink"
+          aria-label="Edit thought"
+          className="w-full resize-y rounded-md border border-line bg-surface-soft px-3 py-2 text-[14px] text-ink focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30 [color-scheme:light]"
         />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {categories.length > 0 && (
             <select
               value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
+              onChange={(e) => setCategoryId(e.target.value)}
               aria-label="Category"
-              className="rounded-md border border-border-strong bg-surface px-2 py-1 text-xs text-ink"
+              className="h-9 rounded-md border border-line bg-surface px-2.5 text-[13px] text-ink focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30 [color-scheme:light]"
             >
               <option value="">No category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
                 </option>
               ))}
             </select>
@@ -233,111 +280,93 @@ function CaptureRow({
                 setEditing(false);
                 setContent(capture.content);
                 setCategoryId(capture.category_id ?? "");
+                setErr(null);
               }}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={save}
               loading={isPending}
               disabled={!content.trim()}
+              onClick={save}
             >
               Save
             </Button>
           </div>
         </div>
+        {err && <p className="mt-1.5 text-[12px] text-danger">{err}</p>}
       </li>
     );
   }
 
   return (
-    <li className="group rounded-md border border-border bg-surface p-3 shadow-soft">
-      <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink">
-        {capture.content}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-        <time
-          dateTime={capture.captured_at}
-          title={formatInTimeZone(capture.captured_at, timezone)}
-        >
-          {formatRelative(capture.captured_at, timezone)}
-        </time>
-        {capture.category && (
-          <span className="inline-flex items-center gap-1">
-            <span
-              aria-hidden
-              className="inline-block size-2 rounded-full"
-              style={{ backgroundColor: capture.category.color ?? "#8f8676" }}
-            />
-            {capture.category.name}
-          </span>
-        )}
-
-        <span className="ml-auto flex items-center gap-1">
-          {filter === "inbox" && (
-            <>
-              <RowAction
-                icon={<Pencil className="size-3.5" />}
-                label="Edit"
-                onClick={() => setEditing(true)}
-              />
-              <RowAction
-                icon={<Archive className="size-3.5" />}
-                label="Archive"
-                onClick={onArchive}
-                disabled={isPending}
-              />
-              <RowAction
-                icon={<Trash2 className="size-3.5" />}
-                label="Discard"
-                onClick={onDiscard}
-                disabled={isPending}
-              />
-            </>
-          )}
-          {(filter === "archived" || filter === "discarded") && (
-            <RowAction
-              icon={<RotateCcw className="size-3.5" />}
-              label="Move to inbox"
-              onClick={onRestore}
-              disabled={isPending}
-            />
-          )}
-          {filter === "processed" && (
-            <RowAction
-              icon={<Archive className="size-3.5" />}
-              label="Archive"
-              onClick={onArchive}
-              disabled={isPending}
-            />
-          )}
-        </span>
-      </div>
-    </li>
-  );
-}
-
-function RowAction({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-1 font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-50"
+    <li
+      className={cn(
+        "flex items-start gap-3 px-4 py-3 transition-colors",
+        pending && "opacity-55",
+      )}
     >
-      {icon}
-      <span className="sr-only sm:not-sr-only">{label}</span>
-    </button>
+      {bulkEnabled && (
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggleSelect}
+          aria-label={`Select "${capture.content.slice(0, 40)}"`}
+          className="mt-1 size-4 shrink-0 accent-gold"
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="whitespace-pre-wrap break-words text-[14px] leading-snug text-body">
+          {capture.content}
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-faint">
+          {stamp && (
+            <time
+              dateTime={stamp}
+              title={formatInTimeZone(stamp, timezone)}
+              suppressHydrationWarning
+            >
+              {formatRelative(stamp, timezone)}
+            </time>
+          )}
+          {capture.category && (
+            <CategoryChip
+              name={capture.category.name}
+              color={capture.category.color}
+            />
+          )}
+          {filter !== "inbox" && capture.task && (
+            <span>{DECISION_LABEL[capture.task.bucket] ?? "Processed"}</span>
+          )}
+          {filter !== "inbox" && capture.task ? (
+            <button
+              type="button"
+              disabled={taskLoading}
+              onClick={() => onOpenTask(capture.task!.id)}
+              className="inline-flex items-center gap-1 font-medium text-gold-dark hover:underline disabled:opacity-50"
+            >
+              Created task: {capture.task.title}
+              <ArrowUpRight aria-hidden className="size-3" />
+            </button>
+          ) : filter === "processed" && !capture.task ? (
+            <span className="italic">Original task is no longer available.</span>
+          ) : null}
+        </div>
+      </div>
+
+      {(filter === "processed" || filter === "archived") && capture.task && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="shrink-0"
+          disabled={taskLoading}
+          onClick={() => onOpenTask(capture.task!.id)}
+        >
+          View task
+        </Button>
+      )}
+      <DropdownMenu label="Thought actions" items={menu} />
+    </li>
   );
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
@@ -15,14 +16,18 @@ export interface WorkspaceContext {
   role: WorkspaceRole;
 }
 
-/** Returns the authenticated user, or null. */
-export async function getUser(): Promise<User | null> {
+/**
+ * Returns the authenticated user, or null.
+ * `cache()`d so repeated calls within one server request (page render + the
+ * Server Actions it triggers) reuse a single `auth.getUser()` round trip.
+ */
+export const getUser = cache(async function getUser(): Promise<User | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user ?? null;
-}
+});
 
 /** Returns the authenticated user or redirects to /login. */
 export async function requireUser(redirectTo?: string): Promise<User> {
@@ -42,50 +47,46 @@ export async function requireUser(redirectTo?: string): Promise<User> {
  * the client. If the user belongs to several workspaces we use their earliest
  * membership (their personal workspace). A workspace switcher is a later phase.
  */
-export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
-  const supabase = await createClient();
+export const getWorkspaceContext = cache(
+  async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
+    const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+    const user = await getUser();
+    if (!user) return null;
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+    // profile and membership are independent — fetch in parallel.
+    const [profileRes, membershipRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("workspace_members")
+        .select("role, workspace_id")
+        .eq("user_id", user.id)
+        .order("joined_at", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-  if (profileError) throw profileError;
-  if (!profile) return null;
+    if (profileRes.error) throw profileRes.error;
+    if (membershipRes.error) throw membershipRes.error;
+    if (!profileRes.data || !membershipRes.data) return null;
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("role, workspace_id")
-    .eq("user_id", user.id)
-    .order("joined_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    const { data: workspace, error: workspaceError } = await supabase
+      .from("workspaces")
+      .select("*")
+      .eq("id", membershipRes.data.workspace_id)
+      .maybeSingle();
 
-  if (membershipError) throw membershipError;
-  if (!membership) return null;
+    if (workspaceError) throw workspaceError;
+    if (!workspace) return null;
 
-  const { data: workspace, error: workspaceError } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("id", membership.workspace_id)
-    .maybeSingle();
-
-  if (workspaceError) throw workspaceError;
-  if (!workspace) return null;
-
-  return {
-    user,
-    profile,
-    workspace,
-    role: membership.role,
-  };
-}
+    return {
+      user,
+      profile: profileRes.data,
+      workspace,
+      role: membershipRes.data.role,
+    };
+  },
+);
 
 /** Like getWorkspaceContext but redirects when unauthenticated / not ready. */
 export async function requireWorkspaceContext(

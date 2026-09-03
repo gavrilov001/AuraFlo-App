@@ -30,7 +30,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
             id={fieldId}
             type={visible ? "text" : "password"}
             aria-invalid={error ? true : undefined}
-            className={cn(controlClass, "pr-10", className)}
+            className={cn(controlClass, "h-11 pr-11", className)}
             {...props}
           />
           <button
@@ -38,7 +38,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
             onClick={() => setVisible((v) => !v)}
             aria-label={visible ? "Hide password" : "Show password"}
             aria-pressed={visible}
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-ink-muted hover:text-ink"
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-ink"
           >
             {visible ? (
               <EyeOff aria-hidden className="size-4" />
@@ -47,9 +47,9 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
             )}
           </button>
         </div>
-        {hint && !error && <p className="text-xs text-ink-muted">{hint}</p>}
+        {hint && !error && <p className="text-[13px] text-muted">{hint}</p>}
         {error && (
-          <p className="text-xs font-medium text-danger" role="alert">
+          <p className="text-[13px] font-medium text-danger" role="alert">
             {error}
           </p>
         )}

@@ -17,15 +17,23 @@ export const loginSchema = z.object({
   redirectTo: z.string().optional(),
 });
 
-export const signupSchema = z.object({
-  fullName: z
-    .string()
-    .trim()
-    .min(1, { message: "Enter your name." })
-    .max(120, { message: "That name is too long." }),
-  email: emailSchema,
-  password: passwordSchema,
-});
+export const signupSchema = z
+  .object({
+    fullName: z
+      .string()
+      .trim()
+      .min(1, { message: "Enter your name." })
+      .max(120, { message: "That name is too long." }),
+    email: emailSchema,
+    password: passwordSchema,
+    confirmPassword: z
+      .string()
+      .min(1, { message: "Re-enter your password." }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Those passwords don't match.",
+    path: ["confirmPassword"],
+  });
 
 export const forgotPasswordSchema = z.object({
   email: emailSchema,

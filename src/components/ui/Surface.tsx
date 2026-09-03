@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils/cn";
 
-/** A light natural surface with a subtle border and restrained shadow. */
+/** A cream working surface with a warm hairline border. Use only where
+ *  containment is genuinely useful (forms, grouped content). */
 export function Card({
   className,
   children,
@@ -9,7 +10,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-surface shadow-soft",
+        "rounded-lg border border-line bg-surface shadow-note",
         className,
       )}
       {...props}
@@ -27,6 +28,7 @@ interface EmptyStateProps {
   className?: string;
 }
 
+/** A quiet editorial empty state — sits directly on the page, no big panel. */
 export function EmptyState({
   title,
   description,
@@ -35,16 +37,13 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong bg-surface/60 px-6 py-10 text-center",
-        className,
-      )}
-    >
-      {icon && <div className="text-ink-subtle">{icon}</div>}
-      <p className="text-sm font-medium text-ink">{title}</p>
+    <div className={cn("flex flex-col items-start gap-2 py-10", className)}>
+      {icon && <div className="mb-1 text-faint">{icon}</div>}
+      <p className="text-[17px] font-semibold text-ink">{title}</p>
       {description && (
-        <p className="max-w-sm text-sm text-ink-muted">{description}</p>
+        <p className="max-w-md text-[15px] leading-relaxed text-muted">
+          {description}
+        </p>
       )}
       {action && <div className="mt-2">{action}</div>}
     </div>

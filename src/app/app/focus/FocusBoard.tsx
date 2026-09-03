@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { TextField, TextAreaField } from "@/components/ui/Field";
-import { FormMessage } from "@/components/ui/FormMessage";
-import { EmptyState } from "@/components/ui/Surface";
+import { Badge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatDateOnly } from "@/lib/utils/datetime";
 import type {
@@ -34,18 +36,26 @@ import {
 const HORIZONS: {
   key: FocusHorizon;
   title: string;
+  label: string;
   blurb: string;
 }[] = [
-  { key: "short", title: "Short term", blurb: "What matters now" },
+  {
+    key: "short",
+    title: "Now",
+    label: "Short term",
+    blurb: "What needs your attention this week or two.",
+  },
   {
     key: "medium",
-    title: "Medium term",
-    blurb: "What you're building toward",
+    title: "Next",
+    label: "Medium term",
+    blurb: "What you're steadily building toward.",
   },
   {
     key: "long",
-    title: "Long term",
-    blurb: "The direction you want to move toward",
+    title: "Direction",
+    label: "Long term",
+    blurb: "Where you want all of this to lead.",
   },
 ];
 
@@ -63,36 +73,38 @@ export function FocusBoard({
   live: FocusItemsByHorizon;
   archived: FocusItem[];
 }) {
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const onError = (message: string) => toast.error(message);
 
   return (
     <div className="flex flex-col gap-8">
-      {error && <FormMessage tone="error">{error}</FormMessage>}
-
-      {HORIZONS.map((horizon) => (
-        <FocusSection
-          key={horizon.key}
-          horizon={horizon.key}
-          title={horizon.title}
-          blurb={horizon.blurb}
-          items={live[horizon.key]}
-          onError={setError}
-        />
-      ))}
+      <div className="grid gap-[clamp(1rem,1.6vw,1.5rem)] sm:grid-cols-2 xl:grid-cols-3">
+        {HORIZONS.map((horizon) => (
+          <FocusSection
+            key={horizon.key}
+            horizon={horizon.key}
+            title={horizon.title}
+            label={horizon.label}
+            blurb={horizon.blurb}
+            items={live[horizon.key]}
+            onError={onError}
+          />
+        ))}
+      </div>
 
       {archived.length > 0 && (
-        <details className="rounded-lg border border-border bg-surface">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-ink-muted">
+        <details className="border-t border-line-soft pt-4">
+          <summary className="cursor-pointer text-sm font-medium text-muted hover:text-ink">
             Archived ({archived.length})
           </summary>
-          <ul className="flex flex-col gap-2 border-t border-border p-3">
+          <ul className="mt-3 flex flex-col gap-1.5">
             {archived.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 text-sm"
               >
-                <span className="text-ink-muted line-through">{item.title}</span>
-                <ReopenButton id={item.id} onError={setError} />
+                <span className="text-faint line-through">{item.title}</span>
+                <ReopenButton id={item.id} onError={onError} />
               </li>
             ))}
           </ul>
@@ -105,12 +117,14 @@ export function FocusBoard({
 function FocusSection({
   horizon,
   title,
+  label,
   blurb,
   items,
   onError,
 }: {
   horizon: FocusHorizon;
   title: string;
+  label: string;
   blurb: string;
   items: FocusItem[];
   onError: (message: string) => void;
@@ -118,26 +132,29 @@ function FocusSection({
   const [adding, setAdding] = useState(false);
 
   return (
-    <section aria-labelledby={`focus-${horizon}`} className="flex flex-col gap-3">
-      <div className="flex items-end justify-between gap-3">
+    <section
+      aria-labelledby={`focus-${horizon}`}
+      className="flex min-h-[300px] flex-col gap-4 rounded-lg border border-line-soft border-t-[3px] border-t-gold/45 bg-surface-soft/40 p-4 sm:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
         <div>
+          <p className="text-[12px] text-faint">{label}</p>
           <h2
             id={`focus-${horizon}`}
-            className="text-base font-semibold text-ink"
+            className="text-[20px] font-semibold leading-tight text-ink"
           >
             {title}
           </h2>
-          <p className="text-xs text-ink-muted">{blurb}</p>
+          <p className="mt-0.5 text-[13px] text-muted">{blurb}</p>
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setAdding((value) => !value)}
+        <IconButton
+          label={`Add to ${title}`}
+          onClick={() => setAdding((v) => !v)}
           aria-expanded={adding}
+          className="mt-0.5 shrink-0 border border-line bg-surface"
         >
           <Plus aria-hidden className="size-4" />
-          Add
-        </Button>
+        </IconButton>
       </div>
 
       {adding && (
@@ -149,10 +166,21 @@ function FocusSection({
       )}
 
       {items.length === 0 && !adding ? (
-        <EmptyState
-          title="Nothing here yet"
-          description="Add one thing you want to keep in view."
-        />
+        <div className="flex flex-1 flex-col items-start justify-center gap-2 py-4">
+          <p className="text-[14px] font-medium text-ink">Nothing here yet.</p>
+          <p className="text-[13px] text-muted">
+            Add one thing worth keeping in view.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-1"
+            onClick={() => setAdding(true)}
+          >
+            <Plus aria-hidden className="size-4" />
+            Add focus
+          </Button>
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((item, index) => (
@@ -206,7 +234,7 @@ function AddFocusForm({
   return (
     <form
       action={handleSubmit}
-      className="flex flex-col gap-3 rounded-md border border-border-strong bg-surface p-3 shadow-soft"
+      className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3.5 shadow-note"
     >
       <TextField
         label="What do you want to keep in view?"
@@ -254,6 +282,7 @@ function FocusItemCard({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -289,7 +318,7 @@ function FocusItemCard({
 
   if (editing) {
     return (
-      <li className="rounded-md border border-border-strong bg-surface p-3 shadow-soft">
+      <li className="rounded-lg border border-line bg-surface p-3.5 shadow-note">
         <form action={handleEdit} className="flex flex-col gap-3">
           <TextField
             label="Title"
@@ -330,18 +359,41 @@ function FocusItemCard({
     );
   }
 
+  const done = item.status === "completed";
+
   return (
     <li
       className={cn(
-        "rounded-md border border-border bg-surface p-3 shadow-soft",
-        item.status === "completed" && "opacity-70",
+        "group rounded-lg border border-line bg-surface p-3.5 shadow-note transition-colors hover:border-line-soft",
+        done && "opacity-65",
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex flex-col gap-0.5 pt-0.5">
-          <button
-            type="button"
-            aria-label="Move up"
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className={cn(
+            "text-[15px] font-medium text-ink",
+            done && "line-through",
+          )}
+        >
+          {item.title}
+        </p>
+        {item.status !== "active" && <Badge>{STATUS_LABEL[item.status]}</Badge>}
+      </div>
+      {item.description && (
+        <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-muted">
+          {item.description}
+        </p>
+      )}
+      {item.target_date && (
+        <p className="mt-1 text-[12px] text-faint">
+          Target {formatDateOnly(item.target_date)}
+        </p>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-1">
+        <div className="mr-1 flex items-center">
+          <IconButton
+            label="Move up"
             disabled={isFirst || isPending}
             onClick={() =>
               run(
@@ -352,13 +404,12 @@ function FocusItemCard({
                 }),
               )
             }
-            className="text-ink-subtle hover:text-ink disabled:opacity-30"
+            className="size-7"
           >
-            <ChevronUp aria-hidden className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Move down"
+            <ChevronUp aria-hidden className="size-3.5" />
+          </IconButton>
+          <IconButton
+            label="Move down"
             disabled={isLast || isPending}
             onClick={() =>
               run(
@@ -369,96 +420,76 @@ function FocusItemCard({
                 }),
               )
             }
-            className="text-ink-subtle hover:text-ink disabled:opacity-30"
+            className="size-7"
           >
-            <ChevronDown aria-hidden className="size-4" />
-          </button>
+            <ChevronDown aria-hidden className="size-3.5" />
+          </IconButton>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p
-              className={cn(
-                "text-sm font-medium text-ink",
-                item.status === "completed" && "line-through",
-              )}
-            >
-              {item.title}
-            </p>
-            {item.status !== "active" && (
-              <span className="rounded-sm bg-surface-sunken px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
-                {STATUS_LABEL[item.status]}
-              </span>
-            )}
-          </div>
-          {item.description && (
-            <p className="mt-1 whitespace-pre-wrap text-sm text-ink-muted">
-              {item.description}
-            </p>
-          )}
-          {item.target_date && (
-            <p className="mt-1 text-xs text-ink-subtle">
-              Target: {formatDateOnly(item.target_date)}
-            </p>
-          )}
-
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-            <CardAction label="Edit" onClick={() => setEditing(true)} />
-            {item.status === "active" && (
-              <CardAction
-                icon={<Pause className="size-3.5" />}
-                label="Pause"
-                disabled={isPending}
-                onClick={() =>
-                  run(setFocusStatusAction({ id: item.id, status: "paused" }))
-                }
-              />
-            )}
-            {item.status === "paused" && (
-              <CardAction
-                icon={<Play className="size-3.5" />}
-                label="Resume"
-                disabled={isPending}
-                onClick={() =>
-                  run(setFocusStatusAction({ id: item.id, status: "active" }))
-                }
-              />
-            )}
-            {item.status !== "completed" ? (
-              <CardAction
-                icon={<CircleCheck className="size-3.5" />}
-                label="Complete"
-                disabled={isPending}
-                onClick={() =>
-                  run(
-                    setFocusStatusAction({ id: item.id, status: "completed" }),
-                  )
-                }
-              />
-            ) : (
-              <CardAction
-                icon={<RotateCcw className="size-3.5" />}
-                label="Reopen"
-                disabled={isPending}
-                onClick={() =>
-                  run(setFocusStatusAction({ id: item.id, status: "active" }))
-                }
-              />
-            )}
-            <ArchiveAction
-              disabled={isPending}
-              onConfirm={() =>
-                run(setFocusStatusAction({ id: item.id, status: "archived" }))
-              }
-            />
-          </div>
-        </div>
+        <TextAction label="Edit" onClick={() => setEditing(true)} />
+        {item.status === "active" && (
+          <TextAction
+            icon={<Pause aria-hidden className="size-3.5" />}
+            label="Pause"
+            disabled={isPending}
+            onClick={() =>
+              run(setFocusStatusAction({ id: item.id, status: "paused" }))
+            }
+          />
+        )}
+        {item.status === "paused" && (
+          <TextAction
+            icon={<Play aria-hidden className="size-3.5" />}
+            label="Resume"
+            disabled={isPending}
+            onClick={() =>
+              run(setFocusStatusAction({ id: item.id, status: "active" }))
+            }
+          />
+        )}
+        {done ? (
+          <TextAction
+            icon={<RotateCcw aria-hidden className="size-3.5" />}
+            label="Reopen"
+            disabled={isPending}
+            onClick={() =>
+              run(setFocusStatusAction({ id: item.id, status: "active" }))
+            }
+          />
+        ) : (
+          <TextAction
+            icon={<CircleCheck aria-hidden className="size-3.5" />}
+            label="Complete"
+            disabled={isPending}
+            onClick={() =>
+              run(setFocusStatusAction({ id: item.id, status: "completed" }))
+            }
+          />
+        )}
+        <TextAction
+          label="Archive"
+          disabled={isPending}
+          onClick={() => setConfirmArchive(true)}
+        />
       </div>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title="Archive this focus?"
+        description={`"${item.title}" moves to your archived list. You can reopen it later.`}
+        confirmLabel="Archive"
+        loading={isPending}
+        onCancel={() => setConfirmArchive(false)}
+        onConfirm={() => {
+          setConfirmArchive(false);
+          run(setFocusStatusAction({ id: item.id, status: "archived" }));
+        }}
+      />
     </li>
   );
 }
 
-function CardAction({
+function TextAction({
   icon,
   label,
   onClick,
@@ -474,51 +505,11 @@ function CardAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-1 font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[13px] font-medium text-muted transition-colors hover:text-ink disabled:opacity-45"
     >
       {icon}
       {label}
     </button>
-  );
-}
-
-function ArchiveAction({
-  onConfirm,
-  disabled,
-}: {
-  onConfirm: () => void;
-  disabled?: boolean;
-}) {
-  const [confirming, setConfirming] = useState(false);
-
-  if (confirming) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <span className="text-ink-muted">Archive?</span>
-        <button
-          type="button"
-          onClick={() => {
-            setConfirming(false);
-            onConfirm();
-          }}
-          disabled={disabled}
-          className="rounded px-1.5 py-1 font-medium text-danger hover:bg-danger-soft"
-        >
-          Yes
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirming(false)}
-          className="rounded px-1.5 py-1 font-medium text-ink-muted hover:bg-surface-sunken"
-        >
-          No
-        </button>
-      </span>
-    );
-  }
-
-  return (
-    <CardAction label="Archive" onClick={() => setConfirming(true)} />
   );
 }
 
@@ -546,7 +537,7 @@ function ReopenButton({
           router.refresh();
         })
       }
-      className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-evergreen hover:bg-evergreen-soft disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-[13px] font-medium text-muted hover:text-ink disabled:opacity-45"
     >
       <RotateCcw aria-hidden className="size-3.5" />
       Reopen

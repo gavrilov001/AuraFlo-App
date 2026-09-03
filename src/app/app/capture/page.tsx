@@ -3,47 +3,54 @@ import type { Metadata } from "next";
 import { requireWorkspaceContext } from "@/lib/auth/context";
 import { getCaptureCounts, listCaptures } from "@/lib/data/captures";
 import { listCategories } from "@/lib/data/categories";
-import { captureFilterSchema } from "@/lib/validation/captures";
-import { CaptureComposer } from "./CaptureComposer";
-import { CaptureList } from "./CaptureList";
+import { listActiveFocusItems } from "@/lib/data/start-day";
+import { listCapturesSchema } from "@/lib/validation/captures";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { CaptureBoard } from "./CaptureBoard";
 
 export const metadata: Metadata = { title: "Dream Catcher" };
 
 export default async function CapturePage({
   searchParams,
-}: PageProps<"/app/capture">) {
-  const params = await searchParams;
-  const filter = captureFilterSchema.parse(
-    typeof params.filter === "string" ? params.filter : undefined,
-  );
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const raw = await searchParams;
+  const params = listCapturesSchema.parse({
+    filter: pick(raw.filter),
+    page: pick(raw.page),
+    q: pick(raw.q),
+    category: pick(raw.category),
+    from: pick(raw.from),
+    to: pick(raw.to),
+  });
 
   const { workspace, profile } = await requireWorkspaceContext();
-  const [captures, counts, categories] = await Promise.all([
-    listCaptures(workspace.id, filter),
+  const [result, counts, categories, focusItems] = await Promise.all([
+    listCaptures(workspace.id, params),
     getCaptureCounts(workspace.id),
     listCategories(workspace.id),
+    listActiveFocusItems(workspace.id),
   ]);
 
   return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
-          Dream Catcher
-        </h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Drop a thought here now. Sort it out later.
-        </p>
-      </header>
-
-      <CaptureComposer categories={categories} />
-
-      <CaptureList
-        filter={filter}
-        captures={captures}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Dream Catcher"
+        subtitle="Capture it now. Decide what happens next when you're ready."
+      />
+      <CaptureBoard
+        result={result}
         counts={counts}
         categories={categories}
+        focusItems={focusItems}
         timezone={profile.timezone}
+        params={params}
       />
     </div>
   );
+}
+
+function pick(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
 }

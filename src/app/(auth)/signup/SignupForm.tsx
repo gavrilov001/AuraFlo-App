@@ -1,63 +1,70 @@
 "use client";
 
 import { useActionState } from "react";
-import { MailCheck } from "lucide-react";
+import Link from "next/link";
 
 import { signUpAction } from "../actions";
-import { TextField } from "@/components/ui/Field";
-import { PasswordField } from "@/components/ui/PasswordField";
-import { SubmitButton } from "@/components/ui/SubmitButton";
-import { FormMessage } from "@/components/ui/FormMessage";
+import { AuthField } from "@/components/auth/AuthField";
+import { AuthPasswordField } from "@/components/auth/AuthPasswordField";
+import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
+import styles from "@/components/welcome/welcome.module.css";
 
 export function SignupForm() {
   const [state, formAction] = useActionState(signUpAction, null);
-
-  if (state?.ok && state.data.needsConfirmation) {
-    return (
-      <div className="flex flex-col items-center gap-3 text-center">
-        <MailCheck aria-hidden className="size-8 text-evergreen" />
-        <h2 className="text-base font-semibold text-ink">Check your email</h2>
-        <p className="text-sm text-ink-muted">
-          We sent you a confirmation link. Open it on this device to finish
-          setting up your account.
-        </p>
-      </div>
-    );
-  }
-
   const fieldErrors = state?.ok === false ? state.fieldErrors : undefined;
   const formError =
     state?.ok === false && !state.fieldErrors ? state.error : undefined;
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" noValidate>
-      {formError && <FormMessage tone="error">{formError}</FormMessage>}
+    <>
+      <form action={formAction} className={styles.authForm} noValidate>
+        {formError && (
+          <p className={styles.authAlert} role="alert">
+            {formError}
+          </p>
+        )}
 
-      <TextField
-        label="Name"
-        name="fullName"
-        autoComplete="name"
-        required
-        error={fieldErrors?.fullName}
-      />
-      <TextField
-        label="Email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        error={fieldErrors?.email}
-      />
-      <PasswordField
-        label="Password"
-        name="password"
-        autoComplete="new-password"
-        required
-        hint="At least 8 characters."
-        error={fieldErrors?.password}
-      />
+        <AuthField
+          label="Full name"
+          name="fullName"
+          autoComplete="name"
+          required
+          error={fieldErrors?.fullName}
+        />
+        <AuthField
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          error={fieldErrors?.email}
+        />
+        <AuthPasswordField
+          label="Password"
+          name="password"
+          autoComplete="new-password"
+          required
+          error={fieldErrors?.password}
+        />
+        <AuthPasswordField
+          label="Confirm password"
+          name="confirmPassword"
+          autoComplete="new-password"
+          required
+          error={fieldErrors?.confirmPassword}
+        />
 
-      <SubmitButton className="mt-1 w-full">Create account</SubmitButton>
-    </form>
+        <AuthSubmitButton>Create my account</AuthSubmitButton>
+      </form>
+
+      <div className={styles.authLinks}>
+        <Link href="/login" className={styles.authLinkPrimary}>
+          Already have an account? <strong>Sign in</strong>
+        </Link>
+        <Link href="/" className={styles.authLinkBack}>
+          <span aria-hidden>&larr;</span> Back to AuraFlo
+        </Link>
+      </div>
+    </>
   );
 }

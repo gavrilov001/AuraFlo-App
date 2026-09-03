@@ -245,6 +245,9 @@ export interface Database {
           category_id: string | null;
           captured_at: string;
           processed_at: string | null;
+          processed_in_daily_plan_id: string | null;
+          archived_at: string | null;
+          discarded_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -260,6 +263,9 @@ export interface Database {
           category_id?: string | null;
           captured_at?: string;
           processed_at?: string | null;
+          processed_in_daily_plan_id?: string | null;
+          archived_at?: string | null;
+          discarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -275,6 +281,9 @@ export interface Database {
           category_id?: string | null;
           captured_at?: string;
           processed_at?: string | null;
+          processed_in_daily_plan_id?: string | null;
+          archived_at?: string | null;
+          discarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -293,6 +302,21 @@ export interface Database {
             referencedRelation: "categories";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "captures_processed_in_daily_plan_id_fkey";
+            columns: ["processed_in_daily_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "daily_plans";
+            referencedColumns: ["id"];
+          },
+          {
+            // reverse of tasks.source_capture_id (unique) — to-one
+            foreignKeyName: "tasks_source_capture_id_fkey";
+            columns: ["id"];
+            isOneToOne: true;
+            referencedRelation: "tasks";
+            referencedColumns: ["source_capture_id"];
+          },
         ];
       };
       tasks: {
@@ -301,6 +325,7 @@ export interface Database {
           workspace_id: string;
           created_by: string | null;
           source_capture_id: string | null;
+          origin_daily_plan_id: string | null;
           focus_item_id: string | null;
           category_id: string | null;
           title: string;
@@ -324,6 +349,7 @@ export interface Database {
           workspace_id: string;
           created_by?: string | null;
           source_capture_id?: string | null;
+          origin_daily_plan_id?: string | null;
           focus_item_id?: string | null;
           category_id?: string | null;
           title: string;
@@ -347,6 +373,7 @@ export interface Database {
           workspace_id?: string;
           created_by?: string | null;
           source_capture_id?: string | null;
+          origin_daily_plan_id?: string | null;
           focus_item_id?: string | null;
           category_id?: string | null;
           title?: string;
@@ -365,7 +392,43 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "tasks_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_source_capture_id_fkey";
+            columns: ["source_capture_id"];
+            isOneToOne: true;
+            referencedRelation: "captures";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_origin_daily_plan_id_fkey";
+            columns: ["origin_daily_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "daily_plans";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_focus_item_id_fkey";
+            columns: ["focus_item_id"];
+            isOneToOne: false;
+            referencedRelation: "focus_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       daily_plans: {
         Row: {
@@ -404,7 +467,15 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "daily_plans_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       daily_plan_items: {
         Row: {
@@ -434,7 +505,22 @@ export interface Database {
           completed_at?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "daily_plan_items_daily_plan_id_fkey";
+            columns: ["daily_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "daily_plans";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "daily_plan_items_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<never, never>;
@@ -462,6 +548,136 @@ export interface Database {
         Args: { target_daily_plan_id: string };
         Returns: boolean;
       };
+      // Added by supabase/migrations/20260902120000_start_my_day.sql
+      start_my_day_process_capture: {
+        Args: {
+          p_capture_id: string;
+          p_daily_plan_id: string;
+          p_decision: string;
+          p_scheduled_for?: string | null;
+          p_due_at?: string | null;
+          p_notes?: string | null;
+          p_focus_item_id?: string | null;
+          p_delegate_name?: string | null;
+          p_delegate_email?: string | null;
+          p_add_to_today?: boolean;
+        };
+        Returns: Json;
+      };
+      start_my_day_undo_capture: {
+        Args: {
+          p_capture_id: string;
+          p_daily_plan_id: string;
+          p_force?: boolean;
+        };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260903120000_start_my_day_today.sql
+      start_my_day_batch_later: {
+        Args: { p_daily_plan_id: string; p_capture_ids: string[] };
+        Returns: Json;
+      };
+      start_my_day_batch_discard: {
+        Args: { p_daily_plan_id: string; p_capture_ids: string[] };
+        Returns: Json;
+      };
+      start_my_day_batch_undo: {
+        Args: {
+          p_daily_plan_id: string;
+          p_capture_ids: string[];
+          p_kind: string;
+        };
+        Returns: Json;
+      };
+      today_set_task_done: {
+        Args: {
+          p_daily_plan_id: string;
+          p_task_id: string;
+          p_done: boolean;
+        };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260904120000_reset_daily_plan.sql
+      reset_current_daily_plan: {
+        Args: { p_reopen_completed?: boolean };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260905120000_reorder_daily_plan_items.sql
+      reorder_daily_plan_items: {
+        Args: { p_daily_plan_id: string; p_item_ids: string[] };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260906120000_batch_process_captures.sql
+      start_my_day_process_captures: {
+        Args: {
+          p_daily_plan_id: string;
+          p_capture_ids: string[];
+          p_decision: string;
+          p_scheduled_for?: string | null;
+          p_due_at?: string | null;
+          p_notes?: string | null;
+          p_focus_item_id?: string | null;
+          p_delegate_name?: string | null;
+          p_delegate_email?: string | null;
+          p_add_to_today?: boolean;
+        };
+        Returns: Json;
+      };
+      start_my_day_undo_captures: {
+        Args: {
+          p_daily_plan_id: string;
+          p_capture_ids: string[];
+          p_decision: string;
+        };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260907120000_all_tasks.sql
+      tasks_create: {
+        Args: {
+          p_workspace_id: string;
+          p_title: string;
+          p_bucket: string;
+          p_notes?: string | null;
+          p_category_id?: string | null;
+          p_focus_item_id?: string | null;
+          p_scheduled_for?: string | null;
+          p_due_at?: string | null;
+          p_delegate_name?: string | null;
+          p_delegate_email?: string | null;
+          p_priority?: number;
+          p_reopen_plan?: boolean;
+        };
+        Returns: Json;
+      };
+      tasks_move_to_destination: {
+        Args: {
+          p_task_id: string;
+          p_bucket: string;
+          p_scheduled_for?: string | null;
+          p_due_at?: string | null;
+          p_delegate_name?: string | null;
+          p_delegate_email?: string | null;
+          p_reopen_plan?: boolean;
+        };
+        Returns: Json;
+      };
+      tasks_set_status: {
+        Args: { p_task_id: string; p_op: string };
+        Returns: Json;
+      };
+      tasks_set_top_three: {
+        Args: { p_task_id: string; p_value: boolean };
+        Returns: Json;
+      };
+      tasks_reorder: {
+        Args: { p_task_ids: string[] };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20260908120000_capture_lifecycle.sql
+      capture_restore: {
+        Args: { p_capture_id: string };
+        Returns: Json;
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;
@@ -488,3 +704,6 @@ export type Category = Database["public"]["Tables"]["categories"]["Row"];
 export type FocusItem = Database["public"]["Tables"]["focus_items"]["Row"];
 export type Capture = Database["public"]["Tables"]["captures"]["Row"];
 export type Task = Database["public"]["Tables"]["tasks"]["Row"];
+export type DailyPlan = Database["public"]["Tables"]["daily_plans"]["Row"];
+export type DailyPlanItem =
+  Database["public"]["Tables"]["daily_plan_items"]["Row"];
