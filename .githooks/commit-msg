@@ -1,0 +1,8 @@
+#!/bin/sh
+# Reject any Claude / Anthropic attribution in commit messages (co-author trailers etc.)
+if grep -iE '(claude|anthropic)' "$1" >/dev/null 2>&1; then
+  echo "commit-msg hook: refusing commit — message references Claude/Anthropic." >&2
+  echo "Remove any 'Co-Authored-By: Claude' / Anthropic lines and commit again." >&2
+  exit 1
+fi
+exit 0

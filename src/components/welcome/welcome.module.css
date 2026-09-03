@@ -1,0 +1,1284 @@
+/*
+ * Welcome page + auth screens — scoped brand styles.
+ * Everything is namespaced under .page / .authPage so the authenticated app
+ * screens are untouched. Palette taken from the existing AuraFlo brand.
+ */
+
+.page,
+.authPage {
+  --navy-950: #050d18;
+  --navy-900: #081321;
+  --navy-800: #0c192a;
+  --navy-700: #17273b;
+  --gold: #d9b25f;
+  --gold-light: #f0d18b;
+  --cream: #fffdf7;
+  --text-secondary: rgba(255, 253, 247, 0.68);
+  --text-quiet: rgba(255, 253, 247, 0.45);
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-soft: rgba(255, 255, 255, 0.06);
+  --danger: #e07a5f;
+
+  color: var(--cream);
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background-color: var(--navy-950);
+  background-image:
+    radial-gradient(
+      1100px 620px at 76% 40%,
+      rgba(217, 178, 95, 0.1),
+      transparent 62%
+    ),
+    radial-gradient(
+      820px 520px at 6% 4%,
+      rgba(120, 150, 190, 0.06),
+      transparent 55%
+    ),
+    linear-gradient(158deg, var(--navy-700) 0%, var(--navy-800) 46%, var(--navy-950) 100%);
+  color: var(--cream);
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.inner {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem);
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding: 18px;
+  }
+  .frame {
+    min-height: calc(100dvh - 36px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    overflow: clip;
+  }
+}
+
+.page a:focus-visible,
+.page button:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Brand wordmark ---------------------------------------------------- */
+
+.brand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  text-decoration: none;
+}
+
+.brandName {
+  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.065em;
+  line-height: 1;
+  font-size: 1.35rem;
+  white-space: nowrap;
+}
+
+.brandSm .brandName {
+  font-size: 1.12rem;
+}
+
+.brandLg .brandName {
+  font-size: clamp(1.75rem, 1rem + 1.6vw, 2.25rem);
+}
+
+.brandLg .brandRule {
+  width: 44px;
+}
+
+.brandAura {
+  color: #fffdf7;
+  font-weight: 600;
+}
+
+.brandOnLight .brandAura {
+  color: #081321;
+}
+
+.brandFlo {
+  color: #d9b25f;
+  font-weight: 500;
+}
+
+.brandRule {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .brandRule {
+    display: block;
+    width: 30px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--gold), rgba(217, 178, 95, 0));
+  }
+}
+
+/* --- Header ---------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(1.1rem, 2.6vw, 1.7rem) 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.9rem, 2.5vw, 1.5rem);
+}
+
+.navLink {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.navLink:hover {
+  color: var(--cream);
+}
+
+/* --- Buttons / links ------------------------------------------------- */
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 1.45rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--gold);
+  color: #1c1305;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.btnPrimary:hover {
+  background: var(--gold-light);
+  transform: translateY(-1px);
+}
+
+.btnPrimary:active {
+  transform: translateY(0);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btnPrimarySm {
+  padding: 0.55rem 1.05rem;
+  font-size: 0.85rem;
+  border-radius: 7px;
+}
+
+.secondaryLink {
+  color: var(--cream);
+  font-size: 0.95rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  padding-bottom: 2px;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.secondaryLink:hover {
+  color: var(--gold-light);
+  border-color: var(--gold);
+}
+
+/* --- Hero ----------------------------------------------------------- */
+
+.hero {
+  display: grid;
+  gap: clamp(2.75rem, 6vw, 4.5rem);
+  align-items: center;
+  padding: clamp(2.5rem, 7vw, 5rem) 0 clamp(3rem, 7vw, 5rem);
+}
+
+@media (min-width: 960px) {
+  .hero {
+    grid-template-columns: 1.02fr 0.98fr;
+  }
+}
+
+.heroCopy {
+  max-width: 34rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gold), rgba(217, 178, 95, 0));
+}
+
+.headline {
+  margin: 0.95rem 0 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  font-size: clamp(2.15rem, 5.2vw, 3.5rem);
+  color: var(--cream);
+  white-space: pre-line;
+}
+
+.sub {
+  margin: 1.2rem 0 0;
+  max-width: 30rem;
+  font-size: clamp(1rem, 1.35vw, 1.075rem);
+  line-height: 1.62;
+  color: var(--text-secondary);
+}
+
+.actions {
+  margin-top: 1.9rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+/* --- Flow illustration -------------------------------------------- */
+
+.story {
+  position: relative;
+  container-type: inline-size;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.storyGlow {
+  position: absolute;
+  inset: -8% -4% -8% 4%;
+  background: radial-gradient(
+    58% 58% at 58% 46%,
+    rgba(217, 178, 95, 0.14),
+    transparent 70%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+
+.storyGrid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1.5rem;
+  padding: 8px 6px;
+}
+
+@container (min-width: 460px) {
+  .storyGrid {
+    grid-template-columns: 1fr 1.06fr;
+    align-items: center;
+    gap: 1.25rem;
+  }
+}
+
+.storyCol {
+  position: relative;
+  z-index: 1;
+}
+
+.onMindLabel,
+.todayKicker {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.onMindLabel {
+  display: block;
+  margin-bottom: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.thoughts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-right: 0.5rem;
+}
+
+.thought {
+  position: relative;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.58rem 0.85rem 0.58rem 1.05rem;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: rgba(255, 253, 247, 0.9);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.thought::before {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 0.95rem;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0.7;
+}
+
+.thought:nth-child(1) {
+  width: 92%;
+  transform: rotate(-1deg);
+}
+
+.thought:nth-child(2) {
+  width: 96%;
+  margin-left: 0.5rem;
+  transform: rotate(0.6deg);
+}
+
+.thought:nth-child(3) {
+  width: 84%;
+  transform: rotate(-0.4deg);
+}
+
+.thought:hover {
+  transform: translateY(-2px) rotate(0);
+  border-color: rgba(217, 178, 95, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.thoughtMeta {
+  display: block;
+  margin-top: 0.22rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: var(--text-quiet);
+}
+
+.connector {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.connectorV {
+  justify-self: center;
+  width: 1px;
+  height: 26px;
+  background: linear-gradient(
+    180deg,
+    rgba(217, 178, 95, 0),
+    var(--gold),
+    rgba(217, 178, 95, 0)
+  );
+}
+
+@container (min-width: 460px) {
+  .connector {
+    display: block;
+  }
+  .connectorV {
+    display: none;
+  }
+}
+
+.flowPath {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 4 7;
+  opacity: 0.75;
+  vector-effect: non-scaling-stroke;
+  animation: auraFlow 7s linear infinite;
+}
+
+@keyframes auraFlow {
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+
+.today {
+  position: relative;
+  z-index: 1;
+  padding: 1.3rem 1.3rem 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.02)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 32px -22px rgba(0, 0, 0, 0.55);
+}
+
+.todayKicker {
+  color: var(--gold);
+}
+
+.todayTitle {
+  margin: 0.32rem 0 1rem;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+}
+
+.priorityRow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.62rem 0;
+  font-size: 0.88rem;
+  color: rgba(255, 253, 247, 0.82);
+}
+
+.priorityRow + .priorityRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.check {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1.5px solid rgba(255, 253, 247, 0.35);
+  border-radius: 50%;
+}
+
+.priorityRow:first-of-type .check {
+  border-color: var(--gold);
+}
+
+.priorityRow:first-of-type .check::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+/* --- Steps --------------------------------------------------------- */
+
+.steps {
+  padding: clamp(2.5rem, 6vw, 4rem) 0;
+  border-top: 1px solid var(--hair);
+}
+
+.stepsGrid {
+  display: grid;
+  gap: 1.75rem;
+}
+
+@media (min-width: 760px) {
+  .stepsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(1.5rem, 4vw, 3rem);
+  }
+  .step + .step {
+    padding-left: clamp(1.5rem, 4vw, 3rem);
+    border-left: 1px solid var(--hair);
+  }
+}
+
+@media (max-width: 759px) {
+  .step + .step {
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--hair);
+  }
+}
+
+.stepNum {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+}
+
+.stepTitle {
+  margin: 0.5rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cream);
+}
+
+.stepBody {
+  max-width: 22rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* --- Closing ------------------------------------------------------ */
+
+.closing {
+  padding: clamp(3rem, 7vw, 5rem) 0 clamp(3.5rem, 8vw, 6rem);
+  border-top: 1px solid var(--hair);
+}
+
+.closingLine {
+  max-width: 32rem;
+  font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--cream);
+}
+
+.closingActions {
+  margin-top: 1.65rem;
+}
+
+/* --- Motion ------------------------------------------------------ */
+
+.reveal {
+  opacity: 0;
+  animation: auraRise 0.55s cubic-bezier(0.2, 0.65, 0.2, 1) forwards;
+}
+
+.d1 {
+  animation-delay: 0.05s;
+}
+.d2 {
+  animation-delay: 0.13s;
+}
+.d3 {
+  animation-delay: 0.22s;
+}
+.d4 {
+  animation-delay: 0.32s;
+}
+.d5 {
+  animation-delay: 0.44s;
+}
+
+@keyframes auraRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    animation: none;
+  }
+  .flowPath {
+    animation: none;
+  }
+  .btnPrimary,
+  .thought,
+  .secondaryLink,
+  .navLink {
+    transition: none;
+  }
+}
+
+/* ================================================================
+ * Auth screens (login / signup) — AuthShell + workflow illustration
+ * ================================================================ */
+
+.authPage,
+.authPage * {
+  box-sizing: border-box;
+}
+
+.authPage {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: clip;
+  padding: clamp(2rem, 5vw, 5rem) clamp(1.25rem, 4vw, 3rem);
+  background-color: var(--navy-950);
+  background-image:
+    radial-gradient(
+      1100px 680px at 78% 32%,
+      rgba(217, 178, 95, 0.09),
+      transparent 62%
+    ),
+    radial-gradient(
+      820px 560px at 6% 8%,
+      rgba(120, 150, 190, 0.06),
+      transparent 55%
+    ),
+    linear-gradient(158deg, #17273b 0%, #0c192a 46%, #050d18 100%);
+}
+
+.authShell {
+  position: relative;
+  width: min(100%, 1440px);
+  min-width: 0;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(2.25rem, 5vw, 3.5rem);
+}
+
+.authShell > * {
+  min-width: 0;
+}
+
+.authBrandHeading,
+.authHeading,
+.authBrandBody,
+.authSubtitle {
+  overflow-wrap: break-word;
+}
+
+.authShell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    46% 60% at 68% 46%,
+    rgba(217, 178, 95, 0.09),
+    transparent 72%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (max-width: 1023px) {
+  .authShell {
+    max-width: min(38rem, 100%);
+  }
+}
+
+@media (min-width: 1024px) {
+  .authShell {
+    grid-template-columns: minmax(0, 1fr) clamp(28rem, 34vw, 32.5rem);
+    align-items: center;
+    gap: clamp(2rem, 4vw, 4.5rem);
+  }
+}
+
+/* --- Left brand + workflow ------------------------------------- */
+
+.authBrand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 2.2vw, 2rem);
+  min-width: 0;
+}
+
+.authWordmarkLink {
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+.authBrandEyebrow {
+  margin: 0;
+  font-size: clamp(0.72rem, 0.5rem + 0.4vw, 0.82rem);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.authBrandHeading {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  font-size: clamp(2.25rem, 1.1rem + 3vw, 4.25rem);
+  color: var(--cream);
+  max-width: min(100%, 16ch);
+  white-space: pre-line;
+}
+
+.authBrandBody {
+  margin: 0;
+  font-size: clamp(1.0625rem, 0.9rem + 0.5vw, 1.25rem);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: min(100%, 44ch);
+}
+
+@media (max-width: 1140px) {
+  .authBrandHeading {
+    font-size: clamp(2.15rem, 1rem + 3.2vw, 2.9rem);
+    max-width: min(100%, 22ch);
+  }
+}
+
+@media (max-width: 559px) {
+  .authBrandBody {
+    display: none;
+  }
+}
+
+/* --- Workflow illustration ------------------------------------- */
+
+.workflow {
+  margin-top: clamp(0.5rem, 1.5vw, 1.5rem);
+  position: relative;
+}
+
+.workflowFull {
+  container-type: inline-size;
+}
+
+.wfGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.1rem;
+}
+
+@container (min-width: 520px) {
+  .wfGrid {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.05fr);
+    align-items: center;
+    column-gap: clamp(0.75rem, 2vw, 1.75rem);
+  }
+}
+
+.wfCol {
+  min-width: 0;
+}
+
+.wfLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.wfBrainLabel {
+  display: block;
+  margin-bottom: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.wfThoughts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.wfThought {
+  position: relative;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.68rem 1rem 0.68rem 1.15rem;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  color: rgba(255, 253, 247, 0.9);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.025)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  box-shadow: 0 12px 26px -20px rgba(0, 0, 0, 0.7);
+}
+
+.wfThought::before {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 1.05rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+.wfThought:nth-child(1) {
+  width: 78%;
+  transform: rotate(-1.1deg);
+}
+
+.wfThought:nth-child(2) {
+  width: 94%;
+  margin-left: 0.7rem;
+  transform: rotate(0.7deg);
+}
+
+.wfThought:nth-child(3) {
+  width: 68%;
+  transform: rotate(-0.4deg);
+}
+
+.wfThoughtTime {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--text-quiet);
+}
+
+.wfArrow {
+  display: none;
+  justify-self: center;
+  width: clamp(44px, 5vw, 64px);
+  height: auto;
+}
+
+.wfArrowLine {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.wfArrowHead {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+
+.wfArrowV {
+  position: relative;
+  justify-self: center;
+  width: 2px;
+  height: 28px;
+  background: linear-gradient(
+    180deg,
+    rgba(217, 178, 95, 0),
+    var(--gold),
+    rgba(217, 178, 95, 0)
+  );
+}
+
+.wfArrowV::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 6px solid var(--gold);
+  opacity: 0.8;
+}
+
+@container (min-width: 520px) {
+  .wfArrow {
+    display: block;
+  }
+  .wfArrowV {
+    display: none;
+  }
+}
+
+.wfPanel {
+  padding: clamp(1.1rem, 1.6vw, 1.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.025)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 22px 44px -30px rgba(0, 0, 0, 0.7);
+}
+
+.wfStartLabel {
+  color: var(--gold);
+}
+
+.wfPanelHeading {
+  margin: 0.35rem 0 0.9rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+}
+
+.wfDecision {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.6rem 0;
+  font-size: 0.9rem;
+  color: rgba(255, 253, 247, 0.82);
+}
+
+.wfDecision + .wfDecision {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.wfTag {
+  flex: none;
+  min-width: 4.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wfTagNow {
+  color: var(--gold-light);
+}
+
+.wfTagSchedule {
+  color: rgba(255, 253, 247, 0.72);
+}
+
+.wfTagLater {
+  color: var(--text-quiet);
+}
+
+.wfFootnote {
+  margin: clamp(1rem, 1.6vw, 1.4rem) 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-quiet);
+}
+
+.wfCompact {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .workflowFull {
+    display: none;
+  }
+  .wfCompact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .wfCompactArrow {
+    position: relative;
+    width: 30px;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      var(--gold),
+      rgba(217, 178, 95, 0.2)
+    );
+  }
+  .wfCompactArrow::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+    border-left: 5px solid var(--gold);
+  }
+}
+
+/* --- Right form panel ----------------------------------------- */
+
+.authFormWrap {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.authFormPanel {
+  width: min(100%, 32.5rem);
+  max-width: 100%;
+  margin-inline: auto;
+  padding: clamp(1.75rem, 1rem + 2.4vw, 3rem);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.02)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 34px 64px -36px rgba(0, 0, 0, 0.65);
+}
+
+.authEyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.authHeading {
+  margin: 0.55rem 0 0;
+  font-size: clamp(2.125rem, 1.3rem + 1.4vw, 2.75rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--cream);
+  text-wrap: balance;
+}
+
+.authSubtitle {
+  margin: 0.75rem 0 0;
+  font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.125rem);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.authForm {
+  margin-top: clamp(1.75rem, 1rem + 1.6vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.authForm > * {
+  min-width: 0;
+}
+
+.authInput {
+  min-width: 0;
+}
+
+.authLabel {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--cream);
+}
+
+.authInput {
+  width: 100%;
+  height: 3.5rem;
+  padding: 0 1.1rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--cream);
+  background: rgba(6, 16, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.authInput::placeholder {
+  color: rgba(255, 253, 247, 0.32);
+}
+
+.authInput:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.authInput:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(217, 178, 95, 0.25);
+}
+
+.authInput[aria-invalid="true"] {
+  border-color: rgba(224, 122, 95, 0.7);
+}
+
+.authInput:-webkit-autofill,
+.authInput:-webkit-autofill:hover,
+.authInput:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--cream);
+  caret-color: var(--cream);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.hasToggle {
+  padding-right: 3.1rem;
+}
+
+.pwWrap {
+  position: relative;
+}
+
+.pwToggle {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 253, 247, 0.55);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.pwToggle:hover {
+  color: var(--cream);
+}
+
+.authError {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.authAlert {
+  margin: 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid rgba(224, 122, 95, 0.35);
+  background: rgba(224, 122, 95, 0.1);
+  color: #f0b8a8;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.authLinks {
+  margin-top: clamp(1.5rem, 1rem + 1.2vw, 1.9rem);
+  padding-top: clamp(1.25rem, 1rem + 0.8vw, 1.6rem);
+  border-top: 1px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.authLinkPrimary {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.authLinkPrimary strong {
+  font-weight: 600;
+  color: var(--gold-light);
+  transition: color 0.18s ease;
+}
+
+.authLinkPrimary:hover strong {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.authLinkBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.authLinkBack:hover {
+  color: var(--cream);
+}
+
+/* --- Submit button sizing (extends .btnPrimary) --------------- */
+
+.btnBlock {
+  width: 100%;
+  min-height: 3.5rem;
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .authInput,
+  .pwToggle,
+  .authLinkPrimary strong,
+  .authLinkBack {
+    transition: none;
+  }
+}
