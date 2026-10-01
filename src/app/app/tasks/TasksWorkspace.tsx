@@ -10,7 +10,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import {
   DndContext,
   KeyboardSensor,
@@ -32,6 +32,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { EmptyState } from "@/components/ui/Surface";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import type { CategoryOption } from "@/lib/data/categories";
@@ -46,6 +47,7 @@ import {
 import { TaskRow, type RowCallbacks } from "./TaskRow";
 import { TaskPanel, type Mode } from "./TaskPanel";
 import {
+  deleteAllTasksAction,
   moveTaskAction,
   reorderTasksAction,
   setTaskStatusAction,
@@ -80,12 +82,14 @@ export function TasksWorkspace({
   categories,
   focusItems,
   timezone,
+  taskTotal,
 }: {
   result: TaskListResult;
   params: ListTasksInput;
   categories: CategoryOption[];
   focusItems: FocusOption[];
   timezone: string;
+  taskTotal: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -100,6 +104,9 @@ export function TasksWorkspace({
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
   const [cancelTask, setCancelTask] = useState<TaskRowData | null>(null);
   const [moreLoading, setMoreLoading] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllPhrase, setDeleteAllPhrase] = useState("");
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
 
   // Reset overlays whenever the server data changes (navigation / refresh).
   const [snapshot, setSnapshot] = useState(result);
@@ -326,6 +333,24 @@ export function TasksWorkspace({
     });
   }
 
+  function confirmDeleteAll() {
+    if (deleteAllBusy || deleteAllPhrase !== "DELETE ALL") return;
+    setDeleteAllBusy(true);
+    void deleteAllTasksAction({ confirm: deleteAllPhrase }).then((r) => {
+      setDeleteAllBusy(false);
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      setDeleteAllOpen(false);
+      setDeleteAllPhrase("");
+      toast.success(
+        r.data.deleted === 1 ? "1 task deleted." : `${r.data.deleted} tasks deleted.`,
+      );
+      router.refresh();
+    });
+  }
+
   function reorderGroup(groupKey: string, orderedIds: string[]) {
     setLocalOrder((o) => ({ ...o, [groupKey]: orderedIds }));
     void reorderTasksAction({ taskIds: orderedIds }).then((r) => {
@@ -400,10 +425,28 @@ export function TasksWorkspace({
           title="All Tasks"
           subtitle="Everything you've decided to keep, in one clear place."
         />
-        <Button size="sm" onClick={() => setPanel({ kind: "add" })}>
-          <Plus aria-hidden className="size-4" />
-          Add task
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" onClick={() => setPanel({ kind: "add" })}>
+            <Plus aria-hidden className="size-4" />
+            Add task
+          </Button>
+          {taskTotal > 0 && (
+            <DropdownMenu
+              label="Task list actions"
+              items={[
+                {
+                  label: "Delete all tasks",
+                  icon: <Trash2 aria-hidden className="size-3.5" />,
+                  danger: true,
+                  onClick: () => {
+                    setDeleteAllPhrase("");
+                    setDeleteAllOpen(true);
+                  },
+                },
+              ]}
+            />
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -607,7 +650,109 @@ export function TasksWorkspace({
         onCancel={() => setCancelTask(null)}
         onConfirm={() => cancelTask && cancel(cancelTask)}
       />
+
+      <DeleteAllTasksDialog
+        open={deleteAllOpen}
+        count={taskTotal}
+        value={deleteAllPhrase}
+        busy={deleteAllBusy}
+        onChange={setDeleteAllPhrase}
+        onCancel={() => {
+          if (deleteAllBusy) return;
+          setDeleteAllOpen(false);
+          setDeleteAllPhrase("");
+        }}
+        onConfirm={confirmDeleteAll}
+      />
     </>
+  );
+}
+
+function DeleteAllTasksDialog({
+  open,
+  count,
+  value,
+  busy,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  value: string;
+  busy: boolean;
+  onChange: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-label="Delete all tasks"
+      onCancel={(e) => {
+        e.preventDefault();
+        onCancel();
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current) onCancel();
+      }}
+      className="m-auto w-[min(100vw-2rem,28rem)] rounded-[14px] border border-line bg-surface p-0 text-body shadow-pop backdrop:bg-navy-900/30"
+    >
+      <div className="flex flex-col gap-3 p-6">
+        <h2 className="text-lg font-semibold text-ink">Delete all tasks?</h2>
+        <p className="text-sm leading-relaxed text-muted">
+          This will permanently delete all tasks in this workspace, including
+          completed, scheduled, delegated, and later tasks. Dream Catcher
+          thoughts, Focus items, and workspace settings will remain.
+        </p>
+        <p className="text-[13px] font-medium text-body">
+          {count === 1
+            ? "1 task will be deleted."
+            : `${count} tasks will be deleted.`}
+        </p>
+        <label className="text-[13px] font-medium text-body">
+          Type <span className="font-mono">DELETE ALL</span> to confirm
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            autoComplete="off"
+            autoCapitalize="off"
+            disabled={busy}
+            className={cn(
+              "mt-1 h-9 w-full rounded-md border border-line bg-surface px-3 text-[13px]",
+              "text-ink focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30",
+            )}
+          />
+        </label>
+        <div className="mt-2 flex justify-end gap-2.5">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={busy}
+            disabled={value !== "DELETE ALL"}
+            onClick={onConfirm}
+          >
+            Delete all tasks
+          </Button>
+        </div>
+      </div>
+    </dialog>
   );
 }
 

@@ -678,6 +678,15 @@ export interface Database {
         Args: { p_capture_id: string };
         Returns: Json;
       };
+      // Added by supabase/migrations/20260909120000_workspace_cleanup.sql
+      workspace_delete_all_tasks: {
+        Args: { p_workspace_id: string; p_today: string };
+        Returns: Json;
+      };
+      workspace_clear_processed_captures: {
+        Args: { p_workspace_id: string };
+        Returns: Json;
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;

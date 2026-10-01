@@ -9,7 +9,6 @@ import {
   getStage3Data,
   listActiveFocusItems,
 } from "@/lib/data/start-day";
-import { getResetPreview } from "@/lib/data/today";
 import {
   greetingFor,
   localDateFor,
@@ -50,8 +49,8 @@ export default async function StartMyDayPage({
   const planDate = localDateFor(timezone);
   const plan = await ensureDailyPlan(workspace.id, user.id, planDate);
   // A daily_plans row always exists here (ensureDailyPlan). Day actions are
-  // available at every step / status.
-  const resetPreview = await getResetPreview(workspace.id, plan);
+  // available at every step / status; their reset/restart preview counts are
+  // fetched on demand when a dialog opens, not on this page load.
 
   const headerProps = {
     greeting: greetingFor(timezone),
@@ -151,11 +150,7 @@ export default async function StartMyDayPage({
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <StartDayHeader {...headerProps} />
-        <DayActions
-          planId={plan.id}
-          resetPreview={resetPreview}
-          menuLabel="Day actions"
-        />
+        <DayActions planId={plan.id} menuLabel="Day actions" />
       </div>
       {showStepper && (
         <StartDayStepper

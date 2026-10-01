@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { requireWorkspaceContext } from "@/lib/auth/context";
 import { getDailyPlan, listActiveFocusItems } from "@/lib/data/start-day";
-import { getResetPreview, getTodayData } from "@/lib/data/today";
+import { getTodayData } from "@/lib/data/today";
 import {
   greetingFor,
   localDateFor,
@@ -46,13 +46,12 @@ export default async function TodayPage() {
 
   // --- Draft plan --------------------------------------------------------
   if (plan.status === "draft") {
-    const draftPreview = await getResetPreview(workspace.id, plan);
     return (
       <Shell dateLabel={dateLabel}>
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div />
-            <DayActions planId={plan.id} resetPreview={draftPreview} />
+            <DayActions planId={plan.id} />
           </div>
           <EmptyCard
             title="Your plan is still taking shape"
@@ -65,10 +64,9 @@ export default async function TodayPage() {
     );
   }
 
-  const [data, allFocusItems, resetPreview] = await Promise.all([
+  const [data, allFocusItems] = await Promise.all([
     getTodayData(workspace.id, plan, timezone),
     listActiveFocusItems(workspace.id),
-    getResetPreview(workspace.id, plan),
   ]);
 
   // --- Completed plan --------------------------------------------------
@@ -87,11 +85,7 @@ export default async function TodayPage() {
                 finished. Anything unfinished is still open in All Tasks.
               </p>
             </div>
-            <DayActions
-              planId={plan.id}
-              resetPreview={resetPreview}
-              showRestartButton
-            />
+            <DayActions planId={plan.id} showRestartButton />
           </div>
           {all.length > 0 && (
             <ul className="flex flex-col divide-y divide-line-soft overflow-hidden rounded-xl border border-line bg-surface">
@@ -139,7 +133,6 @@ export default async function TodayPage() {
         waiting={data.waiting}
         focusItems={data.focusItems}
         allFocusItems={allFocusItems}
-        resetPreview={resetPreview}
         timezone={timezone}
       />
     </Shell>

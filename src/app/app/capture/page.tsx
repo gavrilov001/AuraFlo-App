@@ -23,6 +23,7 @@ export default async function CapturePage({
     category: pick(raw.category),
     from: pick(raw.from),
     to: pick(raw.to),
+    range: pick(raw.range),
   });
 
   const { workspace, profile } = await requireWorkspaceContext();

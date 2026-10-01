@@ -192,6 +192,19 @@ export async function listTasks(
   };
 }
 
+/** Total task count for a workspace (all statuses / buckets) — for the
+ *  "Delete all tasks" confirmation. RLS scopes this to workspaces the caller
+ *  belongs to; the caller still passes a membership-verified workspace id. */
+export async function countAllTasks(workspaceId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 function emptyResult(
   view: TaskView,
   sort: ListTasksInput["sort"],

@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/result";
 import { getDailyPlan } from "@/lib/data/start-day";
 import { sessionTrackingAvailable } from "@/lib/data/session-tracking";
+import { getResetPreview, type ResetPreview } from "@/lib/data/today";
 import { localDateFor } from "@/lib/utils/local-date";
 import {
   completeDaySchema,
@@ -39,6 +40,28 @@ async function loadPlan(planId: string) {
     throw new Error("We couldn't find that plan for your account.");
   }
   return { supabase, userId: user.id, workspaceId: workspace.id, plan };
+}
+
+/**
+ * Reset/Restart preview counts, fetched on demand when the caller opens
+ * either dialog — not on page load. `getResetPreview` runs several extra
+ * queries that only ever mattered for a dialog most visits never open, so
+ * keeping it off the initial render of /app/start and /app/today measurably
+ * speeds up every ordinary page switch.
+ */
+export async function getResetPreviewAction(
+  input: unknown,
+): Promise<ActionResult<ResetPreview>> {
+  const parsed = parseInput(completeDaySchema, input);
+  if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
+
+  try {
+    const { workspaceId, plan } = await loadPlan(parsed.data.planId);
+    const preview = await getResetPreview(workspaceId, plan);
+    return actionOk(preview);
+  } catch (error) {
+    return actionError(toMessage(error, "We couldn't load those counts."));
+  }
 }
 
 export async function quickCaptureAction(

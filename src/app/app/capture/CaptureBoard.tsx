@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { NavTabs } from "@/components/ui/NavTabs";
 import { EmptyState } from "@/components/ui/Surface";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import type { CategoryOption } from "@/lib/data/categories";
@@ -24,6 +25,7 @@ import { CaptureComposer, type CaptureInput } from "./CaptureComposer";
 import { CaptureList } from "./CaptureList";
 import {
   archiveCaptureAction,
+  clearProcessedCapturesAction,
   copyCaptureToInboxAction,
   createCaptureAction,
   deleteCaptureAction,
@@ -249,6 +251,29 @@ export function CaptureBoard({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkConfirm, setBulkConfirm] = useState("");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearPhrase, setClearPhrase] = useState("");
+  const [clearBusy, setClearBusy] = useState(false);
+
+  function confirmClearProcessed() {
+    if (clearBusy || clearPhrase !== "CLEAR") return;
+    setClearBusy(true);
+    void clearProcessedCapturesAction({ confirm: clearPhrase }).then((r) => {
+      setClearBusy(false);
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      setClearOpen(false);
+      setClearPhrase("");
+      toast.success(
+        r.data.deleted === 1
+          ? "1 processed thought removed."
+          : `${r.data.deleted} processed thoughts removed.`,
+      );
+      router.refresh();
+    });
+  }
 
   function confirmDelete() {
     const id = deleteId;
@@ -399,6 +424,59 @@ export function CaptureBoard({
               className="h-9 rounded-md border border-line bg-surface px-2 text-[13px] text-ink focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             />
           </label>
+          {filter === "processed" &&
+            !params.from &&
+            !params.to &&
+            (counts.processed > 0 || params.range === "all") && (
+            <div
+              role="group"
+              aria-label="Processed date range"
+              className="inline-flex h-9 items-center rounded-md border border-line bg-surface p-0.5 text-[12px]"
+            >
+              <button
+                type="button"
+                onClick={() => setParam({ range: null })}
+                aria-pressed={params.range !== "all"}
+                className={cn(
+                  "rounded px-2.5 py-1 font-medium transition-colors",
+                  params.range !== "all"
+                    ? "bg-surface-hover text-ink"
+                    : "text-muted hover:text-ink",
+                )}
+              >
+                Last 7 days
+              </button>
+              <button
+                type="button"
+                onClick={() => setParam({ range: "all" })}
+                aria-pressed={params.range === "all"}
+                className={cn(
+                  "rounded px-2.5 py-1 font-medium transition-colors",
+                  params.range === "all"
+                    ? "bg-surface-hover text-ink"
+                    : "text-muted hover:text-ink",
+                )}
+              >
+                All time
+              </button>
+            </div>
+          )}
+          {filter === "processed" && counts.processed > 0 && (
+            <DropdownMenu
+              label="Processed history actions"
+              items={[
+                {
+                  label: "Clear processed history",
+                  icon: <Trash2 aria-hidden className="size-3.5" />,
+                  danger: true,
+                  onClick: () => {
+                    setClearPhrase("");
+                    setClearOpen(true);
+                  },
+                },
+              ]}
+            />
+          )}
         </div>
       )}
 
@@ -427,10 +505,26 @@ export function CaptureBoard({
       )}
 
       {visible.length === 0 ? (
-        <EmptyState
-          title={EMPTY[filter].title}
-          description={EMPTY[filter].description}
-        />
+        result.recentDefaultApplied && counts.processed > 0 ? (
+          <EmptyState
+            title="Nothing processed in the last 7 days."
+            description={`You still have ${counts.processed} older processed ${counts.processed === 1 ? "thought" : "thoughts"} — nothing was deleted, they're just out of this window.`}
+            action={
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setParam({ range: "all" })}
+              >
+                Show all time
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title={EMPTY[filter].title}
+            description={EMPTY[filter].description}
+          />
+        )
       ) : (
         <>
           <CaptureList
@@ -498,6 +592,20 @@ export function CaptureBoard({
         onConfirm={confirmBulkDelete}
       />
 
+      <ClearProcessedDialog
+        open={clearOpen}
+        count={counts.processed}
+        value={clearPhrase}
+        busy={clearBusy}
+        onChange={setClearPhrase}
+        onCancel={() => {
+          if (clearBusy) return;
+          setClearOpen(false);
+          setClearPhrase("");
+        }}
+        onConfirm={confirmClearProcessed}
+      />
+
       <TaskPanel
         mode={panelMode}
         categories={categories}
@@ -509,6 +617,88 @@ export function CaptureBoard({
         }}
       />
     </div>
+  );
+}
+
+function ClearProcessedDialog({
+  open,
+  count,
+  value,
+  busy,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  value: string;
+  busy: boolean;
+  onChange: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-label="Clear processed history"
+      onCancel={(e) => {
+        e.preventDefault();
+        onCancel();
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current) onCancel();
+      }}
+      className="m-auto w-[min(100vw-2rem,28rem)] rounded-[14px] border border-line bg-surface p-0 text-body shadow-pop backdrop:bg-navy-900/30"
+    >
+      <div className="flex flex-col gap-3 p-6">
+        <h2 className="text-lg font-semibold text-ink">Clear processed history?</h2>
+        <p className="text-sm leading-relaxed text-muted">
+          This will permanently remove all processed thoughts from Dream Catcher.
+          Tasks created from these thoughts will remain in All Tasks.
+        </p>
+        <p className="text-[13px] font-medium text-body">
+          {count === 1
+            ? "1 processed thought will be removed."
+            : `${count} processed thoughts will be removed.`}
+        </p>
+        <label className="text-[13px] font-medium text-body">
+          Type <span className="font-mono">CLEAR</span> to confirm
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            autoComplete="off"
+            autoCapitalize="off"
+            disabled={busy}
+            className={cn(
+              "mt-1 h-9 w-full rounded-md border border-line bg-surface px-3 text-[13px]",
+              "text-ink focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30",
+            )}
+          />
+        </label>
+        <div className="mt-2 flex justify-end gap-2.5">
+          <Button variant="secondary" size="sm" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={busy}
+            disabled={value !== "CLEAR"}
+            onClick={onConfirm}
+          >
+            Clear processed history
+          </Button>
+        </div>
+      </div>
+    </dialog>
   );
 }
 

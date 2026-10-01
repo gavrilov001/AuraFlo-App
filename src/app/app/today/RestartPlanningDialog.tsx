@@ -13,11 +13,13 @@ export function RestartPlanningDialog({
   open,
   planId,
   preview,
+  previewError,
   onClose,
 }: {
   open: boolean;
   planId: string;
-  preview: Pick<ResetPreview, "topThree" | "completedInPlan">;
+  preview: Pick<ResetPreview, "topThree" | "completedInPlan"> | null;
+  previewError?: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -43,7 +45,7 @@ export function RestartPlanningDialog({
   }
 
   function submit() {
-    if (isPending) return;
+    if (isPending || !preview) return;
     setError(null);
     startTransition(async () => {
       const result = await restartPlanningAction({
@@ -83,43 +85,55 @@ export function RestartPlanningDialog({
           My Day to Step&nbsp;1 so you can work through your inbox again.
         </p>
 
-        <label className="mt-1 flex items-start gap-2.5 text-[13px] text-body">
-          <input
-            type="checkbox"
-            checked={clearTopThree}
-            onChange={(e) => setClearTopThree(e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-gold"
-          />
-          <span>
-            Clear my current Top&nbsp;3
-            <span className="mt-0.5 block text-faint">
-              {preview.topThree > 0
-                ? `${preview.topThree} priorit${
-                    preview.topThree === 1 ? "y" : "ies"
-                  } will be un-starred.`
-                : "You have no priorities selected yet."}
-            </span>
-          </span>
-        </label>
+        {preview ? (
+          <>
+            <label className="mt-1 flex items-start gap-2.5 text-[13px] text-body">
+              <input
+                type="checkbox"
+                checked={clearTopThree}
+                onChange={(e) => setClearTopThree(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-gold"
+              />
+              <span>
+                Clear my current Top&nbsp;3
+                <span className="mt-0.5 block text-faint">
+                  {preview.topThree > 0
+                    ? `${preview.topThree} priorit${
+                        preview.topThree === 1 ? "y" : "ies"
+                      } will be un-starred.`
+                    : "You have no priorities selected yet."}
+                </span>
+              </span>
+            </label>
 
-        <label className="flex items-start gap-2.5 text-[13px] text-body">
-          <input
-            type="checkbox"
-            checked={reopenCompleted}
-            onChange={(e) => setReopenCompleted(e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-gold"
+            <label className="flex items-start gap-2.5 text-[13px] text-body">
+              <input
+                type="checkbox"
+                checked={reopenCompleted}
+                onChange={(e) => setReopenCompleted(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-gold"
+              />
+              <span>
+                Reopen tasks completed in today&rsquo;s plan
+                <span className="mt-0.5 block text-faint">
+                  {preview.completedInPlan > 0
+                    ? `${preview.completedInPlan} completed task${
+                        preview.completedInPlan === 1 ? "" : "s"
+                      } will be set back to open.`
+                    : "Nothing in this plan is completed."}
+                </span>
+              </span>
+            </label>
+          </>
+        ) : previewError ? (
+          <FormMessage tone="error">{previewError}</FormMessage>
+        ) : (
+          <div
+            aria-label="Loading counts"
+            aria-live="polite"
+            className="h-16 animate-pulse rounded-lg border border-line-soft bg-surface-soft/50"
           />
-          <span>
-            Reopen tasks completed in today&rsquo;s plan
-            <span className="mt-0.5 block text-faint">
-              {preview.completedInPlan > 0
-                ? `${preview.completedInPlan} completed task${
-                    preview.completedInPlan === 1 ? "" : "s"
-                  } will be set back to open.`
-                : "Nothing in this plan is completed."}
-            </span>
-          </span>
-        </label>
+        )}
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
@@ -132,7 +146,12 @@ export function RestartPlanningDialog({
           >
             Cancel
           </Button>
-          <Button size="sm" loading={isPending} onClick={submit}>
+          <Button
+            size="sm"
+            loading={isPending}
+            disabled={!preview}
+            onClick={submit}
+          >
             Restart planning
           </Button>
         </div>

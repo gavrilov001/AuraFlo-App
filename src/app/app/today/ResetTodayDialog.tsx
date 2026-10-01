@@ -13,10 +13,12 @@ import { resetTodayAction } from "./actions";
 export function ResetTodayDialog({
   open,
   preview,
+  previewError,
   onClose,
 }: {
   open: boolean;
-  preview: ResetPreview;
+  preview: ResetPreview | null;
+  previewError?: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -42,7 +44,7 @@ export function ResetTodayDialog({
   }
 
   function submit() {
-    if (confirm !== "RESET" || isPending) return;
+    if (confirm !== "RESET" || isPending || !preview) return;
     setError(null);
     startTransition(async () => {
       const result = await resetTodayAction({
@@ -84,44 +86,57 @@ export function ResetTodayDialog({
           not be deleted.
         </p>
 
-        <dl className="mt-1 flex flex-col gap-1.5 rounded-lg border border-line-soft bg-surface-soft/50 p-3.5 text-[13px]">
-          <Row label="Plan items removed" value={preview.planItems} />
-          <Row
-            label="Tasks created this session, deleted"
-            value={preview.sessionTasks}
-          />
-          <Row
-            label="Thoughts returned to the Dream Catcher"
-            value={preview.restoredCaptures}
-          />
-        </dl>
+        {preview ? (
+          <>
+            <dl className="mt-1 flex flex-col gap-1.5 rounded-lg border border-line-soft bg-surface-soft/50 p-3.5 text-[13px]">
+              <Row label="Plan items removed" value={preview.planItems} />
+              <Row
+                label="Tasks created this session, deleted"
+                value={preview.sessionTasks}
+              />
+              <Row
+                label="Thoughts returned to the Dream Catcher"
+                value={preview.restoredCaptures}
+              />
+            </dl>
 
-        {preview.legacyUntracked && (
-          <FormMessage tone="error">
-            Some items from this earlier planning session cannot be automatically
-            returned because session tracking was not available. The plan and its
-            priorities will be cleared, but no tasks or thoughts will be deleted.
-          </FormMessage>
+            {preview.legacyUntracked && (
+              <FormMessage tone="error">
+                Some items from this earlier planning session cannot be
+                automatically returned because session tracking was not
+                available. The plan and its priorities will be cleared, but no
+                tasks or thoughts will be deleted.
+              </FormMessage>
+            )}
+
+            <label className="mt-1 flex items-start gap-2.5 text-[13px] text-body">
+              <input
+                type="checkbox"
+                checked={reopen}
+                onChange={(e) => setReopen(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-gold"
+              />
+              <span>
+                Reopen existing tasks completed in today&rsquo;s plan
+                <span className="mt-0.5 block text-faint">
+                  Tasks that existed before this planning session will be
+                  preserved, but their completed status will be reopened
+                  {preview.completedPreexisting > 0
+                    ? ` (${preview.completedPreexisting}).`
+                    : "."}
+                </span>
+              </span>
+            </label>
+          </>
+        ) : previewError ? (
+          <FormMessage tone="error">{previewError}</FormMessage>
+        ) : (
+          <div
+            aria-label="Loading counts"
+            aria-live="polite"
+            className="h-24 animate-pulse rounded-lg border border-line-soft bg-surface-soft/50"
+          />
         )}
-
-        <label className="mt-1 flex items-start gap-2.5 text-[13px] text-body">
-          <input
-            type="checkbox"
-            checked={reopen}
-            onChange={(e) => setReopen(e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-gold"
-          />
-          <span>
-            Reopen existing tasks completed in today&rsquo;s plan
-            <span className="mt-0.5 block text-faint">
-              Tasks that existed before this planning session will be preserved,
-              but their completed status will be reopened
-              {preview.completedPreexisting > 0
-                ? ` (${preview.completedPreexisting}).`
-                : "."}
-            </span>
-          </span>
-        </label>
 
         <div className="mt-1">
           <TextField
@@ -148,7 +163,7 @@ export function ResetTodayDialog({
             variant="danger"
             size="sm"
             loading={isPending}
-            disabled={confirm !== "RESET"}
+            disabled={confirm !== "RESET" || !preview}
             onClick={submit}
           >
             Reset today
