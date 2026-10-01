@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { requireWorkspaceContext } from "@/lib/auth/context";
 import { listCategories } from "@/lib/data/categories";
 import { listActiveFocusItems } from "@/lib/data/start-day";
-import { listTasks } from "@/lib/data/tasks";
+import { countAllTasks, listTasks } from "@/lib/data/tasks";
 import { listTasksSchema } from "@/lib/validation/tasks";
 import { TasksWorkspace } from "./TasksWorkspace";
 
@@ -28,10 +28,11 @@ export default async function AllTasksPage({
   const { user, workspace, profile } = await requireWorkspaceContext();
   const timezone = profile.timezone;
 
-  const [result, categories, focusItems] = await Promise.all([
+  const [result, categories, focusItems, taskTotal] = await Promise.all([
     listTasks(workspace.id, user.id, timezone, params),
     listCategories(workspace.id),
     listActiveFocusItems(workspace.id),
+    countAllTasks(workspace.id),
   ]);
 
   return (
@@ -42,6 +43,7 @@ export default async function AllTasksPage({
         categories={categories}
         focusItems={focusItems}
         timezone={timezone}
+        taskTotal={taskTotal}
       />
     </div>
   );

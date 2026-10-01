@@ -40,6 +40,14 @@ export const captureFilterSchema = z
   .default("inbox");
 export type CaptureFilter = z.infer<typeof captureFilterSchema>;
 
+/**
+ * Processed defaults to a recent window so old history doesn't pile up on
+ * screen — nothing is deleted, "all" is one click away. Other tabs (Inbox,
+ * Archived, Discarded) always show everything regardless of this value.
+ */
+export const captureRangeSchema = z.enum(["recent", "all"]).default("recent");
+export type CaptureRange = z.infer<typeof captureRangeSchema>;
+
 /** Paginated list query for a Dream Catcher tab. */
 export const listCapturesSchema = z.object({
   filter: captureFilterSchema,
@@ -48,6 +56,7 @@ export const listCapturesSchema = z.object({
   category: z.string().optional().default(""),
   from: dateOnly.optional().or(z.literal("").transform(() => undefined)),
   to: dateOnly.optional().or(z.literal("").transform(() => undefined)),
+  range: captureRangeSchema,
 });
 export type ListCapturesInput = z.infer<typeof listCapturesSchema>;
 
@@ -74,6 +83,13 @@ export const deleteCapturesBulkSchema = z.object({
   ids: z.array(uuid).min(1).max(200),
   confirm: z.string().refine((v) => v === "DELETE", {
     message: "Type DELETE to confirm.",
+  }),
+});
+
+/** Danger action: permanently delete every processed capture in the workspace. */
+export const clearProcessedCapturesSchema = z.object({
+  confirm: z.string().refine((v) => v === "CLEAR", {
+    message: "Type CLEAR to confirm.",
   }),
 });
 

@@ -13,6 +13,17 @@ const AUTH_ROUTES = ["/login", "/signup"];
  * - authenticated users hitting /login or /signup are sent to /app
  */
 export async function updateSession(request: NextRequest) {
+  // Server Action requests (Next.js tags them with this header) never
+  // navigate, so the redirect logic below is moot for them — and every
+  // Server Action already re-verifies auth + workspace membership itself via
+  // requireWorkspaceContext(), independently and server-side. Skipping the
+  // extra auth.getUser() round trip here cuts one full Supabase Auth network
+  // hop off every mutation (capture, complete, archive, ...) without
+  // weakening any check — the action still fully authenticates on its own.
+  if (request.headers.has("next-action")) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(

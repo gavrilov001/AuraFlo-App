@@ -29,7 +29,6 @@ import type {
   PlanItemWithTask,
   PlanTask,
 } from "@/lib/data/start-day";
-import type { ResetPreview } from "@/lib/data/today";
 import {
   linkFocusAction,
   moveTaskToLaterAction,
@@ -56,7 +55,6 @@ export function TodayWorkspace({
   waiting,
   focusItems,
   allFocusItems,
-  resetPreview,
   timezone,
 }: {
   plan: { id: string };
@@ -68,7 +66,6 @@ export function TodayWorkspace({
   waiting: PlanTask[];
   focusItems: FocusOption[];
   allFocusItems: FocusOption[];
-  resetPreview: ResetPreview;
   timezone: string;
 }) {
   const router = useRouter();
@@ -166,7 +163,7 @@ export function TodayWorkspace({
               <Pencil aria-hidden className="size-3.5" />
               Adjust plan
             </Link>
-            <DayActions planId={plan.id} resetPreview={resetPreview} />
+            <DayActions planId={plan.id} />
           </div>
         </div>
         {totalCount > 0 && (

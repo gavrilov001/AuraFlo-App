@@ -30,9 +30,15 @@ export interface CaptureListResult {
   page: number;
   hasMore: boolean;
   captures: CaptureWithCategory[];
+  /** True when the "last 7 days" default window was applied to Processed
+   *  (i.e. the caller didn't set a custom date range or ask for "all"). */
+  recentDefaultApplied: boolean;
 }
 
 export const CAPTURES_PAGE_SIZE = 30;
+/** Processed defaults to this window so old history doesn't pile up on
+ *  screen. Nothing is deleted — "All time" is one click away in the UI. */
+export const PROCESSED_RECENT_DAYS = 7;
 
 const SELECT =
   "*, category:categories(id, name, color), " +
@@ -54,7 +60,7 @@ export async function listCaptures(
   params: ListCapturesInput,
 ): Promise<CaptureListResult> {
   const supabase = await createClient();
-  const { filter, page, q, category, from, to } = params;
+  const { filter, page, q, category, from, to, range } = params;
   const lifecycle = await captureLifecycleColumnsAvailable();
 
   let query = supabase
@@ -82,6 +88,17 @@ export async function listCaptures(
           : "discarded_at";
   if (from) query = query.gte(dateCol, `${from}T00:00:00Z`);
   if (to) query = query.lte(dateCol, `${to}T23:59:59Z`);
+
+  // Processed defaults to the last N days when the caller hasn't set a
+  // custom date range or explicitly asked for "all". Purely a default view —
+  // no data is touched, and switching to "All time" removes it instantly.
+  const recentDefaultApplied =
+    filter === "processed" && range === "recent" && !from && !to;
+  if (recentDefaultApplied) {
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - PROCESSED_RECENT_DAYS);
+    query = query.gte(dateCol, cutoff.toISOString());
+  }
 
   if (filter === "inbox") {
     query = query.order("captured_at", { ascending: false });
@@ -111,6 +128,7 @@ export async function listCaptures(
     page,
     hasMore: rows.length > limit,
     captures: rows.slice(0, limit),
+    recentDefaultApplied,
   };
 }
 

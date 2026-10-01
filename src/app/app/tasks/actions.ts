@@ -18,6 +18,7 @@ import { localDateFor } from "@/lib/utils/local-date";
 import type { Database, Task } from "@/lib/types/database.types";
 import {
   createTaskSchema,
+  deleteAllTasksSchema,
   destinationToBucket,
   moveTaskSchema,
   reorderTasksSchema,
@@ -34,6 +35,7 @@ let moveRpc: boolean | null = null;
 let statusRpc: boolean | null = null;
 let topThreeRpc: boolean | null = null;
 let reorderRpc: boolean | null = null;
+let deleteAllRpc: boolean | null = null;
 
 function friendly(code?: string, message?: string): string {
   switch (code) {
@@ -687,5 +689,63 @@ export async function reorderTasksAction(
     return actionOk(null);
   } catch (error) {
     return actionError(toMessage(error, "We couldn't save the new order."));
+  }
+}
+
+// --- danger: delete every task in the active workspace -----------------
+
+export async function deleteAllTasksAction(
+  input: unknown,
+): Promise<ActionResult<{ deleted: number }>> {
+  const parsed = parseInput(deleteAllTasksSchema, input);
+  if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
+
+  try {
+    const c = await ctx();
+    const today = localDateFor(c.timezone);
+
+    // Preferred: one atomic security-definer function (deletes tasks in this
+    // workspace only + clears the caller's plan for today).
+    if (deleteAllRpc !== false) {
+      const rpc = await c.supabase.rpc("workspace_delete_all_tasks", {
+        p_workspace_id: c.workspaceId,
+        p_today: today,
+      });
+      if (rpc.error) {
+        if (RPC_MISSING.has(rpc.error.code ?? "")) deleteAllRpc = false;
+        else return actionError(friendly(rpc.error.code, rpc.error.message));
+      } else {
+        deleteAllRpc = true;
+        done();
+        const deleted = Number(
+          (rpc.data as { deleted?: number } | null)?.deleted ?? 0,
+        );
+        return actionOk({ deleted });
+      }
+    }
+
+    // Fallback (RPC not deployed): two RLS-scoped bulk deletes. RLS restricts
+    // both to workspaces the caller belongs to; we also pin the workspace id
+    // resolved from the membership row, never from the client.
+    // daily_plan_items are removed by the tasks.id ON DELETE CASCADE.
+    const del = await c.supabase
+      .from("tasks")
+      .delete()
+      .eq("workspace_id", c.workspaceId)
+      .select("id");
+    if (del.error) throw del.error;
+
+    const planDel = await c.supabase
+      .from("daily_plans")
+      .delete()
+      .eq("workspace_id", c.workspaceId)
+      .eq("user_id", c.userId)
+      .eq("plan_date", today);
+    if (planDel.error) throw planDel.error;
+
+    done();
+    return actionOk({ deleted: del.data?.length ?? 0 });
+  } catch (error) {
+    return actionError(toMessage(error, "We couldn't delete your tasks."));
   }
 }

@@ -138,6 +138,13 @@ export const reorderTasksSchema = z.object({
   taskIds: z.array(uuid).min(1).max(500),
 });
 
+/** Danger action: delete every task in the active workspace. */
+export const deleteAllTasksSchema = z.object({
+  confirm: z.string().refine((v) => v === "DELETE ALL", {
+    message: "Type DELETE ALL to confirm.",
+  }),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export type MoveTaskInput = z.infer<typeof moveTaskSchema>;

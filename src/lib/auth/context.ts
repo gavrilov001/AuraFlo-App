@@ -54,35 +54,36 @@ export const getWorkspaceContext = cache(
     const user = await getUser();
     if (!user) return null;
 
-    // profile and membership are independent — fetch in parallel.
+    // profile and membership+workspace are independent — fetch in parallel.
+    // The workspace is embedded in the membership query (one round trip
+    // instead of two sequential ones) via the workspace_members ->
+    // workspaces foreign key; RLS still applies to the embedded row.
     const [profileRes, membershipRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
       supabase
         .from("workspace_members")
-        .select("role, workspace_id")
+        .select("role, workspace_id, workspace:workspaces(*)")
         .eq("user_id", user.id)
         .order("joined_at", { ascending: true })
         .limit(1)
-        .maybeSingle(),
+        .maybeSingle()
+        .returns<{
+          role: WorkspaceRole;
+          workspace_id: string;
+          workspace: Workspace | null;
+        }>(),
     ]);
 
     if (profileRes.error) throw profileRes.error;
     if (membershipRes.error) throw membershipRes.error;
-    if (!profileRes.data || !membershipRes.data) return null;
-
-    const { data: workspace, error: workspaceError } = await supabase
-      .from("workspaces")
-      .select("*")
-      .eq("id", membershipRes.data.workspace_id)
-      .maybeSingle();
-
-    if (workspaceError) throw workspaceError;
-    if (!workspace) return null;
+    if (!profileRes.data || !membershipRes.data || !membershipRes.data.workspace) {
+      return null;
+    }
 
     return {
       user,
       profile: profileRes.data,
-      workspace,
+      workspace: membershipRes.data.workspace,
       role: membershipRes.data.role,
     };
   },
