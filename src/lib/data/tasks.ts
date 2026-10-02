@@ -147,25 +147,33 @@ export async function listTasks(
   else if (focus) query = query.eq("focus_item_id", focus);
 
   if (view === "completed") {
-    query = query.order("completed_at", { ascending: false, nullsFirst: false });
+    query = query
+      .order("completed_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
   } else if (sort === "due") {
     query = query
       .order("due_at", { ascending: true, nullsFirst: false })
       .order("scheduled_for", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: false });
   } else if (sort === "newest") {
-    query = query.order("created_at", { ascending: false });
+    query = query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
   } else if (sort === "oldest") {
-    query = query.order("created_at", { ascending: true });
+    query = query
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: false });
   } else {
     query = query
       .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: false });
   }
 
-  // Cumulative paging: page N returns the first N * PAGE_SIZE rows (+1 probe).
-  const limit = page * TASKS_PAGE_SIZE;
-  query = query.range(0, limit);
+  const start = (page - 1) * TASKS_PAGE_SIZE;
+  const end = start + TASKS_PAGE_SIZE;
+  query = query.range(start, end);
 
   const { data, error } = await query.returns<
     (Task & { category: CategoryRef; focus: FocusRef })[]
@@ -173,8 +181,8 @@ export async function listTasks(
   if (error) throw error;
 
   const rows = data ?? [];
-  const hasMore = rows.length > limit;
-  const page_rows = rows.slice(0, limit).map<TaskRow>((r) => ({
+  const hasMore = rows.length > TASKS_PAGE_SIZE;
+  const page_rows = rows.slice(0, TASKS_PAGE_SIZE).map<TaskRow>((r) => ({
     ...r,
     is_top_three: byTask.get(r.id)?.is_top_three ?? false,
     in_today_plan: byTask.has(r.id),

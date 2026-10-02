@@ -105,6 +105,7 @@ export function ShapeDay({
   }
 
   const persistedOrder = useRef<string[]>(planItems.map((i) => i.id));
+  const reorderQueue = useRef(Promise.resolve());
 
   const topThreeCount = items.filter((i) => i.is_top_three).length;
 
@@ -132,19 +133,23 @@ export function ShapeDay({
     const previous = persistedOrder.current;
     const nextIds = next.map((i) => i.id);
     persistedOrder.current = nextIds;
-    void reorderPlanItemsAction({ planId: plan.id, itemIds: nextIds }).then(
-      (result) => {
-        if (!result.ok) {
+    reorderQueue.current = reorderQueue.current.catch(() => {}).then(async () => {
+      const result = await reorderPlanItemsAction({
+        planId: plan.id,
+        itemIds: nextIds,
+      });
+      if (!result.ok) {
+        if (persistedOrder.current.join(",") === nextIds.join(",")) {
           persistedOrder.current = previous;
           setItems((current) => {
             const map = new Map(current.map((i) => [i.id, i]));
             return previous.map((id) => map.get(id)).filter(Boolean) as
               PlanItemWithTask[];
           });
-          toast.error(result.error ?? "We couldn't save the new order.");
         }
-      },
-    );
+        toast.error(result.error ?? "We couldn't save the new order.");
+      }
+    });
   }
 
   function handleDragEnd(event: DragEndEvent) {

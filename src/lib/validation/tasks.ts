@@ -66,7 +66,9 @@ export const listTasksSchema = z.object({
   category: z.string().optional().default(""),
   focus: z.string().optional().default(""),
   sort: z.enum(TASK_SORTS).default("manual"),
-  page: z.coerce.number().int().min(1).max(999).default(1),
+  // .catch(1) (not .default()) so page=0, page=-1, page=abc, etc. normalize
+  // to page 1 instead of throwing out of listTasksSchema.parse().
+  page: z.coerce.number().int().min(1).max(999).catch(1),
   showCancelled: z
     .union([z.literal("1"), z.literal("true"), z.boolean()])
     .optional()

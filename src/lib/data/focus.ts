@@ -18,7 +18,9 @@ export async function getFocusBoard(workspaceId: string): Promise<FocusBoard> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("focus_items")
-    .select("*")
+    .select(
+      "id, workspace_id, created_by, title, description, horizon, status, target_date, sort_order, created_at, updated_at",
+    )
     .eq("workspace_id", workspaceId)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });

@@ -101,23 +101,29 @@ export async function listCaptures(
   }
 
   if (filter === "inbox") {
-    query = query.order("captured_at", { ascending: false });
+    query = query
+      .order("captured_at", { ascending: false })
+      .order("id", { ascending: false });
   } else if (filter === "processed" || !lifecycle) {
     query = query
       .order("processed_at", { ascending: false, nullsFirst: false })
-      .order("captured_at", { ascending: false });
+      .order("captured_at", { ascending: false })
+      .order("id", { ascending: false });
   } else if (filter === "archived") {
     query = query
       .order("archived_at", { ascending: false, nullsFirst: false })
-      .order("processed_at", { ascending: false, nullsFirst: false });
+      .order("processed_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
   } else {
     query = query
       .order("discarded_at", { ascending: false, nullsFirst: false })
-      .order("processed_at", { ascending: false, nullsFirst: false });
+      .order("processed_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
   }
 
-  const limit = page * CAPTURES_PAGE_SIZE;
-  query = query.range(0, limit);
+  const start = (page - 1) * CAPTURES_PAGE_SIZE;
+  const end = start + CAPTURES_PAGE_SIZE;
+  query = query.range(start, end);
 
   const { data, error } = await query.returns<CaptureWithCategory[]>();
   if (error) throw error;
@@ -126,8 +132,8 @@ export async function listCaptures(
   return {
     filter,
     page,
-    hasMore: rows.length > limit,
-    captures: rows.slice(0, limit),
+    hasMore: rows.length > CAPTURES_PAGE_SIZE,
+    captures: rows.slice(0, CAPTURES_PAGE_SIZE),
     recentDefaultApplied,
   };
 }

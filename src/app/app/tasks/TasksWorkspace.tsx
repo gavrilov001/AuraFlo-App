@@ -95,7 +95,7 @@ export function TasksWorkspace({
   const pathname = usePathname();
   const search = useSearchParams();
   const toast = useToast();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   const [panel, setPanel] = useState<Mode | null>(null);
   const [patch, setPatch] = useState<Record<string, Patch>>({});
@@ -103,10 +103,10 @@ export function TasksWorkspace({
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
   const [cancelTask, setCancelTask] = useState<TaskRowData | null>(null);
-  const [moreLoading, setMoreLoading] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllPhrase, setDeleteAllPhrase] = useState("");
   const [deleteAllBusy, setDeleteAllBusy] = useState(false);
+  const reorderQueues = useRef(new Map<string, Promise<void>>());
 
   // Reset overlays whenever the server data changes (navigation / refresh).
   const [snapshot, setSnapshot] = useState(result);
@@ -116,7 +116,6 @@ export function TasksWorkspace({
     setHidden(new Set());
     setPending(new Set());
     setLocalOrder({});
-    setMoreLoading(false);
   }
 
   const sensors = useSensors(
@@ -353,14 +352,25 @@ export function TasksWorkspace({
 
   function reorderGroup(groupKey: string, orderedIds: string[]) {
     setLocalOrder((o) => ({ ...o, [groupKey]: orderedIds }));
-    void reorderTasksAction({ taskIds: orderedIds }).then((r) => {
-      if (!r.ok) {
-        setLocalOrder((o) => {
-          const n = { ...o };
-          delete n[groupKey];
-          return n;
+    const previous = reorderQueues.current.get(groupKey) ?? Promise.resolve();
+    const queue = previous.catch(() => {}).then(async () => {
+      const result = await reorderTasksAction({ taskIds: orderedIds });
+      if (!result.ok) {
+        setLocalOrder((current) => {
+          if (current[groupKey]?.join(",") !== orderedIds.join(",")) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[groupKey];
+          return next;
         });
-        toast.error(r.error);
+        toast.error(result.error);
+      }
+    });
+    reorderQueues.current.set(groupKey, queue);
+    void queue.finally(() => {
+      if (reorderQueues.current.get(groupKey) === queue) {
+        reorderQueues.current.delete(groupKey);
       }
     });
   }
@@ -606,23 +616,47 @@ export function TasksWorkspace({
         </div>
       )}
 
-      {result.hasMore && (
-        <div>
+      <div className="flex flex-wrap items-center gap-3 text-[13px] text-faint">
+        {params.page > 1 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={isPending}
+            onClick={() =>
+              startTransition(() =>
+                setParam({ page: String(params.page - 1) }),
+              )
+            }
+          >
+            Newer
+          </Button>
+        )}
+        <span>Page {params.page}</span>
+        {params.page > 1 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={isPending}
+            onClick={() => startTransition(() => setParam({ page: null }))}
+          >
+            Newest
+          </Button>
+        )}
+        {result.hasMore && (
           <Button
             size="sm"
             variant="secondary"
-            loading={moreLoading}
-            onClick={() => {
-              setMoreLoading(true);
-              startTransition(() => {
-                setParam({ page: String(params.page + 1) });
-              });
-            }}
+            loading={isPending}
+            onClick={() =>
+              startTransition(() =>
+                setParam({ page: String(params.page + 1) }),
+              )
+            }
           >
-            Load more
+            Older
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {!dndEnabled && params.sort === "manual" && view === "open" && (
         <FormMessage tone="success">

@@ -602,6 +602,13 @@ export interface Database {
         Args: { p_reopen_completed?: boolean };
         Returns: Json;
       };
+      reset_workspace_daily_plan: {
+        Args: {
+          p_workspace_id: string;
+          p_reopen_completed?: boolean;
+        };
+        Returns: Json;
+      };
       // Added by supabase/migrations/20260905120000_reorder_daily_plan_items.sql
       reorder_daily_plan_items: {
         Args: { p_daily_plan_id: string; p_item_ids: string[] };

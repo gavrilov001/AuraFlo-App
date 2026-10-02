@@ -26,7 +26,6 @@ import {
 
 const RPC_MISSING = new Set(["42883", "PGRST202", "PGRST203"]);
 let restoreRpcAvailable: boolean | null = null;
-let clearProcessedRpcAvailable: boolean | null = null;
 
 async function verifyCategoryInWorkspace(
   categoryId: string,
@@ -359,42 +358,27 @@ export async function clearProcessedCapturesAction(
     const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
-    // Preferred: one atomic security-definer bulk delete.
-    if (clearProcessedRpcAvailable !== false) {
-      const rpc = await supabase.rpc("workspace_clear_processed_captures", {
-        p_workspace_id: workspace.id,
-      });
-      if (rpc.error) {
-        if (RPC_MISSING.has(rpc.error.code ?? "")) {
-          clearProcessedRpcAvailable = false;
-        } else if (rpc.error.code === "42501") {
-          return actionError("You don't have access to do that.");
-        } else {
-          return actionError("We couldn't clear your processed history.");
-        }
-      } else {
-        clearProcessedRpcAvailable = true;
-        revalidate();
-        const deleted = Number(
-          (rpc.data as { deleted?: number } | null)?.deleted ?? 0,
-        );
-        return actionOk({ deleted });
+    const rpc = await supabase.rpc("workspace_clear_processed_captures", {
+      p_workspace_id: workspace.id,
+    });
+    if (rpc.error) {
+      if (rpc.error.code === "42501") {
+        return actionError("Only workspace owners and admins can do that.");
       }
+      if (RPC_MISSING.has(rpc.error.code ?? "")) {
+        return actionError(
+          "Processed history cannot be cleared until the integrity migration is applied.",
+        );
+      }
+      return actionError("We couldn't clear your processed history.");
     }
 
-    // Fallback (RPC not deployed): one RLS-scoped bulk delete. The workspace id
-    // comes from the membership row, never the client. tasks.source_capture_id
-    // is ON DELETE SET NULL, so linked tasks are kept and only unlinked.
-    const { data, error } = await supabase
-      .from("captures")
-      .delete()
-      .eq("workspace_id", workspace.id)
-      .eq("status", "processed")
-      .select("id");
-    if (error) throw error;
-
     revalidate();
-    return actionOk({ deleted: data?.length ?? 0 });
+    return actionOk({
+      deleted: Number(
+        (rpc.data as { deleted?: number } | null)?.deleted ?? 0,
+      ),
+    });
   } catch (error) {
     return actionError(
       toMessage(error, "We couldn't clear your processed history."),

@@ -51,7 +51,9 @@ export type CaptureRange = z.infer<typeof captureRangeSchema>;
 /** Paginated list query for a Dream Catcher tab. */
 export const listCapturesSchema = z.object({
   filter: captureFilterSchema,
-  page: z.coerce.number().int().min(1).max(999).default(1),
+  // .catch(1) (not .default()) so page=0, page=-1, page=abc, etc. normalize
+  // to page 1 instead of throwing out of listCapturesSchema.parse().
+  page: z.coerce.number().int().min(1).max(999).catch(1),
   q: z.string().trim().max(120).optional().default(""),
   category: z.string().optional().default(""),
   from: dateOnly.optional().or(z.literal("").transform(() => undefined)),

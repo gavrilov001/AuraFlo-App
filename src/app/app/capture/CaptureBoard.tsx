@@ -81,14 +81,14 @@ export function CaptureBoard({
   const pathname = usePathname();
   const search = useSearchParams();
   const toast = useToast();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   const filter = params.filter;
+  const [pendingRows, setPendingRows] = useState<CaptureWithCategory[]>([]);
 
   // --- optimistic capture create (inbox only) ------------------------
   // Rapid captures each show instantly as a pending row; a single debounced
   // refresh reconciles them with the saved records once typing stops.
-  const [pendingRows, setPendingRows] = useState<CaptureWithCategory[]>([]);
   const refreshTimer = useRef<number | undefined>(undefined);
 
   const scheduleRefresh = useCallback(() => {
@@ -139,7 +139,11 @@ export function CaptureBoard({
         clientToken: crypto.randomUUID(),
       }).then((r) => {
         if (r.ok) {
-          scheduleRefresh();
+          if (params.page > 1) {
+            setParam({ page: null });
+          } else {
+            scheduleRefresh();
+          }
           resolve({ ok: true });
         } else {
           setPendingRows((p) => p.filter((x) => x.id !== tempId));
@@ -159,6 +163,9 @@ export function CaptureBoard({
     setHidden(new Set());
     setBusy(new Set());
     setSelected(new Set());
+    // A fresh server result (post-create refresh, or the page-1 navigation
+    // below) now carries the real record, so drop the optimistic temp row —
+    // otherwise its id never matches a saved id and it lingers as a duplicate.
     setPendingRows([]);
   }
 
@@ -552,21 +559,47 @@ export function CaptureBoard({
             taskLoading={panelLoading}
             onSaved={() => router.refresh()}
           />
-          {result.hasMore && (
-            <div>
+          <div className="flex flex-wrap items-center gap-3 text-[13px] text-faint">
+            {params.page > 1 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={isPending}
+                onClick={() =>
+                  startTransition(() =>
+                    setParam({ page: String(params.page - 1) }),
+                  )
+                }
+              >
+                Newer
+              </Button>
+            )}
+            <span>Page {params.page}</span>
+            {params.page > 1 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={isPending}
+                onClick={() => startTransition(() => setParam({ page: null }))}
+              >
+                Newest
+              </Button>
+            )}
+            {result.hasMore && (
               <Button
                 size="sm"
                 variant="secondary"
+                loading={isPending}
                 onClick={() =>
                   startTransition(() =>
                     setParam({ page: String(params.page + 1) }),
                   )
                 }
               >
-                Load more
+                Older
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
 

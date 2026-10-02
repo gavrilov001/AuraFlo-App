@@ -11,10 +11,7 @@ import {
   toMessage,
   type ActionResult,
 } from "@/lib/actions/result";
-import { getDailyPlan } from "@/lib/data/start-day";
-import { sessionTrackingAvailable } from "@/lib/data/session-tracking";
 import { getResetPreview, type ResetPreview } from "@/lib/data/today";
-import { localDateFor } from "@/lib/utils/local-date";
 import {
   completeDaySchema,
   quickCaptureSchema,
@@ -24,7 +21,6 @@ import {
 
 const RPC_MISSING = new Set(["42883", "PGRST202", "PGRST203"]);
 let taskDoneRpcAvailable: boolean | null = null;
-let resetRpcAvailable: boolean | null = null;
 
 /** Load the caller's own active/completed plan by id. */
 async function loadPlan(planId: string) {
@@ -69,7 +65,6 @@ export async function quickCaptureAction(
 ): Promise<ActionResult<null>> {
   const parsed = parseInput(quickCaptureSchema, input);
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
-
   try {
     const { user, workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
@@ -118,7 +113,6 @@ export async function setTaskDoneAction(
       }
     }
 
-    // Sequential fallback.
     const { data: task, error: taskErr } = await ctx.supabase
       .from("tasks")
       .select("id, workspace_id, bucket")
@@ -128,7 +122,6 @@ export async function setTaskDoneAction(
     if (!task || task.workspace_id !== ctx.workspaceId) {
       return actionError("That task no longer exists.");
     }
-    // Confirm the task is part of this plan.
     const { data: item } = await ctx.supabase
       .from("daily_plan_items")
       .select("id")
@@ -177,150 +170,46 @@ export async function resetTodayAction(
 ): Promise<ActionResult<ResetResult>> {
   const parsed = parseInput(resetTodaySchema, input);
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
-  const reopen = parsed.data.reopenCompleted;
 
   try {
-    const { user, profile, workspace } = await requireWorkspaceContext();
+    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
-
-    if (resetRpcAvailable !== false) {
-      const rpc = await supabase.rpc("reset_current_daily_plan", {
-        p_reopen_completed: reopen,
-      });
-      if (rpc.error) {
-        if (RPC_MISSING.has(rpc.error.code ?? "")) {
-          resetRpcAvailable = false;
-        } else {
-          return actionError("We couldn't reset today.");
-        }
-      } else {
-        resetRpcAvailable = true;
-        const d = rpc.data as {
-          status: "reset" | "no_plan";
-          deleted_plan_items: number;
-          deleted_session_tasks: number;
-          restored_captures: number;
-          reopened_tasks: number;
-          legacy_untracked: boolean;
-        };
-        revalidatePath("/app/today");
-        revalidatePath("/app/start");
-        revalidatePath("/app/capture");
-        return actionOk({
-          status: d.status,
-          deletedPlanItems: d.deleted_plan_items,
-          deletedSessionTasks: d.deleted_session_tasks,
-          restoredCaptures: d.restored_captures,
-          reopenedTasks: d.reopened_tasks,
-          legacyUntracked: d.legacy_untracked,
-        });
+    const rpc = await supabase.rpc("reset_workspace_daily_plan", {
+      p_workspace_id: workspace.id,
+      p_reopen_completed: parsed.data.reopenCompleted,
+    });
+    if (rpc.error) {
+      if (rpc.error.message === "workspace_required") {
+        return actionError(
+          "Choose a workspace before resetting a day with multiple workspaces.",
+        );
       }
-    }
-
-    // --- Sequential fallback (guarded; RPC is the atomic path) -------------
-    const planDate = localDateFor(profile.timezone);
-    const plan = await getDailyPlan(workspace.id, user.id, planDate);
-    if (!plan) {
-      return actionOk({
-        status: "no_plan",
-        deletedPlanItems: 0,
-        deletedSessionTasks: 0,
-        restoredCaptures: 0,
-        reopenedTasks: 0,
-        legacyUntracked: false,
-      });
-    }
-
-    const tracking = await sessionTrackingAvailable();
-
-    // Rows + (legacy) status/bucket for reopening.
-    const legacySelect = tracking
-      ? "id, task_id, task:tasks(status, bucket, origin_daily_plan_id)"
-      : "id, task_id, task:tasks(status, bucket)";
-    const { data: itemRows } = await supabase
-      .from("daily_plan_items")
-      .select(legacySelect)
-      .eq("daily_plan_id", plan.id)
-      .returns<
-        {
-          id: string;
-          task_id: string;
-          task: {
-            status: string;
-            bucket: string;
-            origin_daily_plan_id?: string | null;
-          } | null;
-        }[]
-      >();
-    const rows = itemRows ?? [];
-    const trackedTasks = tracking
-      ? rows.filter((r) => r.task?.origin_daily_plan_id === plan.id).length
-      : 0;
-
-    let reopenedTasks = 0;
-    if (reopen) {
-      for (const r of rows) {
-        // Without tracking, every plan task is treated as pre-existing.
-        const preexisting = !tracking
-          ? true
-          : r.task?.origin_daily_plan_id !== plan.id;
-        if (r.task?.status === "completed" && preexisting) {
-          await supabase
-            .from("tasks")
-            .update({
-              status: r.task.bucket === "delegated" ? "waiting" : "open",
-            })
-            .eq("id", r.task_id)
-            .eq("workspace_id", workspace.id);
-          reopenedTasks += 1;
-        }
+      if (RPC_MISSING.has(rpc.error.code ?? "")) {
+        return actionError(
+          "Reset Today is unavailable until the integrity migration is applied.",
+        );
       }
+      return actionError("We couldn't reset today.");
     }
 
-    const delItems = await supabase
-      .from("daily_plan_items")
-      .delete()
-      .eq("daily_plan_id", plan.id)
-      .select("id");
-
-    let deletedSessionTasks = 0;
-    let restoredCaptures = 0;
-    if (tracking) {
-      const delTasks = await supabase
-        .from("tasks")
-        .delete()
-        .eq("origin_daily_plan_id", plan.id)
-        .eq("workspace_id", workspace.id)
-        .select("id");
-      deletedSessionTasks = delTasks.data?.length ?? 0;
-
-      const restored = await supabase
-        .from("captures")
-        .update({
-          status: "inbox",
-          processed_at: null,
-          processed_in_daily_plan_id: null,
-        })
-        .eq("processed_in_daily_plan_id", plan.id)
-        .eq("workspace_id", workspace.id)
-        .select("id");
-      restoredCaptures = restored.data?.length ?? 0;
-    }
-
-    await supabase.from("daily_plans").delete().eq("id", plan.id);
-
+    const result = rpc.data as {
+      status: "reset" | "no_plan";
+      deleted_plan_items: number;
+      deleted_session_tasks: number;
+      restored_captures: number;
+      reopened_tasks: number;
+      legacy_untracked: boolean;
+    };
     revalidatePath("/app/today");
     revalidatePath("/app/start");
     revalidatePath("/app/capture");
     return actionOk({
-      status: "reset",
-      deletedPlanItems: delItems.data?.length ?? 0,
-      deletedSessionTasks,
-      restoredCaptures,
-      reopenedTasks,
-      legacyUntracked:
-        !tracking ||
-        (rows.length > 0 && trackedTasks === 0 && restoredCaptures === 0),
+      status: result.status,
+      deletedPlanItems: result.deleted_plan_items,
+      deletedSessionTasks: result.deleted_session_tasks,
+      restoredCaptures: result.restored_captures,
+      reopenedTasks: result.reopened_tasks,
+      legacyUntracked: result.legacy_untracked,
     });
   } catch (error) {
     return actionError(toMessage(error, "We couldn't reset today."));
