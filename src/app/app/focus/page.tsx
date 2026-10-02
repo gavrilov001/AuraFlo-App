@@ -18,7 +18,11 @@ export default async function FocusPage() {
         subtitle="What matters now, what you're building toward, and where you're headed — in one view."
       />
 
-      <FocusBoard live={board.live} archived={board.archived} />
+      <FocusBoard
+        live={board.live}
+        archived={board.archived}
+        workspaceId={workspace.id}
+      />
     </div>
   );
 }
