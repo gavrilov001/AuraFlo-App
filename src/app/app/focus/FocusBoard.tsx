@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -26,6 +25,7 @@ import type {
   FocusStatus,
 } from "@/lib/types/database.types";
 import type { FocusItemsByHorizon } from "@/lib/data/focus";
+import type { ActionResult } from "@/lib/actions/result";
 import {
   createFocusItemAction,
   reorderFocusItemAction,
@@ -66,15 +66,261 @@ const STATUS_LABEL: Record<FocusStatus, string> = {
   archived: "Archived",
 };
 
+interface FocusBoardState {
+  live: FocusItemsByHorizon;
+  archived: FocusItem[];
+}
+
+interface FocusFormInput {
+  title: string;
+  description: string | null;
+  targetDate: string | null;
+}
+
+/** Same ordering the server query uses, so an optimistic insert lands where a refetch would put it. */
+function compareItems(a: FocusItem, b: FocusItem): number {
+  if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+  return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+}
+
+function insertSorted(list: FocusItem[], item: FocusItem): FocusItem[] {
+  const next = list.filter((i) => i.id !== item.id);
+  const index = next.findIndex((i) => compareItems(item, i) < 0);
+  if (index === -1) next.push(item);
+  else next.splice(index, 0, item);
+  return next;
+}
+
+function findItem(board: FocusBoardState, id: string): FocusItem | undefined {
+  for (const horizon of HORIZONS) {
+    const found = board.live[horizon.key].find((i) => i.id === id);
+    if (found) return found;
+  }
+  return board.archived.find((i) => i.id === id);
+}
+
+/** Moves `item` to `nextStatus`, relocating it between its horizon list and the archived list as needed. */
+function applyStatusChange(
+  board: FocusBoardState,
+  item: FocusItem,
+  nextStatus: FocusStatus,
+): FocusBoardState {
+  const wasArchived = item.status === "archived";
+  const willArchive = nextStatus === "archived";
+  const updated: FocusItem = { ...item, status: nextStatus };
+
+  if (!wasArchived && !willArchive) {
+    const list = board.live[item.horizon].map((i) =>
+      i.id === item.id ? updated : i,
+    );
+    return { ...board, live: { ...board.live, [item.horizon]: list } };
+  }
+  if (!wasArchived && willArchive) {
+    const list = board.live[item.horizon].filter((i) => i.id !== item.id);
+    return {
+      live: { ...board.live, [item.horizon]: list },
+      archived: insertSorted(board.archived, updated),
+    };
+  }
+  // wasArchived && !willArchive — reopening back into its horizon.
+  return {
+    archived: board.archived.filter((i) => i.id !== item.id),
+    live: {
+      ...board.live,
+      [item.horizon]: insertSorted(board.live[item.horizon], updated),
+    },
+  };
+}
+
 export function FocusBoard({
   live,
   archived,
+  workspaceId,
 }: {
   live: FocusItemsByHorizon;
   archived: FocusItem[];
+  workspaceId: string;
 }) {
   const toast = useToast();
   const onError = (message: string) => toast.error(message);
+
+  // A fresh `live`/`archived` prop pair (new navigation, or a future refetch)
+  // replaces local optimistic state outright.
+  const [snapshot, setSnapshot] = useState({ live, archived });
+  const [board, setBoard] = useState<FocusBoardState>(snapshot);
+  if (snapshot.live !== live || snapshot.archived !== archived) {
+    setSnapshot({ live, archived });
+    setBoard({ live, archived });
+  }
+
+  // One request in flight per horizon at a time, so a reorder call's "current
+  // order" read on the server always reflects every earlier queued swap.
+  const reorderQueues = useRef(new Map<FocusHorizon, Promise<void>>());
+
+  async function createItem(
+    horizon: FocusHorizon,
+    input: FocusFormInput,
+  ): Promise<ActionResult<{ id: string }>> {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    const maxSortOrder = board.live[horizon].reduce(
+      (max, i) => Math.max(max, i.sort_order),
+      0,
+    );
+    const tempItem: FocusItem = {
+      id: tempId,
+      workspace_id: workspaceId,
+      created_by: null,
+      title: input.title,
+      description: input.description,
+      horizon,
+      status: "active",
+      target_date: input.targetDate,
+      sort_order: maxSortOrder + 10,
+      created_at: now,
+      updated_at: now,
+    };
+    setBoard((b) => ({
+      ...b,
+      live: { ...b.live, [horizon]: [...b.live[horizon], tempItem] },
+    }));
+
+    const result = await createFocusItemAction({
+      title: input.title,
+      description: input.description,
+      horizon,
+      targetDate: input.targetDate,
+    });
+
+    if (!result.ok) {
+      setBoard((b) => ({
+        ...b,
+        live: {
+          ...b.live,
+          [horizon]: b.live[horizon].filter((i) => i.id !== tempId),
+        },
+      }));
+      return result;
+    }
+
+    setBoard((b) => ({
+      ...b,
+      live: {
+        ...b.live,
+        [horizon]: b.live[horizon].map((i) =>
+          i.id === tempId ? { ...i, id: result.data.id } : i,
+        ),
+      },
+    }));
+    return result;
+  }
+
+  async function editItem(
+    item: FocusItem,
+    input: FocusFormInput,
+  ): Promise<ActionResult<null>> {
+    const result = await updateFocusItemAction({
+      id: item.id,
+      title: input.title,
+      description: input.description,
+      targetDate: input.targetDate,
+    });
+    if (result.ok) {
+      setBoard((b) => ({
+        ...b,
+        live: {
+          ...b.live,
+          [item.horizon]: b.live[item.horizon].map((i) =>
+            i.id === item.id
+              ? {
+                  ...i,
+                  title: input.title,
+                  description: input.description,
+                  target_date: input.targetDate,
+                }
+              : i,
+          ),
+        },
+      }));
+    }
+    return result;
+  }
+
+  function setStatus(item: FocusItem, nextStatus: FocusStatus) {
+    const previousStatus = item.status;
+    setBoard((b) => applyStatusChange(b, item, nextStatus));
+    void setFocusStatusAction({ id: item.id, status: nextStatus }).then(
+      (result) => {
+        if (!result.ok) {
+          setBoard((b) => {
+            const current = findItem(b, item.id);
+            // Only undo if nothing else changed this item's status meanwhile.
+            if (!current || current.status !== nextStatus) return b;
+            return applyStatusChange(b, current, previousStatus);
+          });
+          onError(result.error);
+        }
+      },
+    );
+  }
+
+  function reorderItem(
+    horizon: FocusHorizon,
+    item: FocusItem,
+    direction: "up" | "down",
+  ) {
+    const list = board.live[horizon];
+    const index = list.findIndex((i) => i.id === item.id);
+    if (index === -1) return;
+    const swapWith = direction === "up" ? index - 1 : index + 1;
+    if (swapWith < 0 || swapWith >= list.length) return;
+
+    const current = list[index];
+    const neighbor = list[swapWith];
+
+    setBoard((b) => {
+      const l = b.live[horizon];
+      const i = l.findIndex((x) => x.id === current.id);
+      const j = l.findIndex((x) => x.id === neighbor.id);
+      if (i === -1 || j === -1) return b;
+      const next = [...l];
+      next[i] = { ...l[j], sort_order: l[i].sort_order };
+      next[j] = { ...l[i], sort_order: l[j].sort_order };
+      return { ...b, live: { ...b.live, [horizon]: next } };
+    });
+
+    const previousInQueue =
+      reorderQueues.current.get(horizon) ?? Promise.resolve();
+    const queued = previousInQueue.catch(() => {}).then(async () => {
+      const result = await reorderFocusItemAction({
+        id: current.id,
+        horizon,
+        direction,
+      });
+      if (!result.ok) {
+        setBoard((b) => {
+          const l = b.live[horizon];
+          const i = l.findIndex((x) => x.id === current.id);
+          const j = l.findIndex((x) => x.id === neighbor.id);
+          // Only undo if the two are still exactly where this swap put them —
+          // a later queued reorder or other edit may have moved on already.
+          if (i === -1 || j === -1 || Math.abs(i - j) !== 1) return b;
+          const [a, bIdx] = i < j ? [i, j] : [j, i];
+          const next = [...l];
+          next[a] = { ...l[bIdx], sort_order: l[a].sort_order };
+          next[bIdx] = { ...l[a], sort_order: l[bIdx].sort_order };
+          return { ...b, live: { ...b.live, [horizon]: next } };
+        });
+        onError(result.error);
+      }
+    });
+    reorderQueues.current.set(horizon, queued);
+    void queued.finally(() => {
+      if (reorderQueues.current.get(horizon) === queued) {
+        reorderQueues.current.delete(horizon);
+      }
+    });
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -86,25 +332,29 @@ export function FocusBoard({
             title={horizon.title}
             label={horizon.label}
             blurb={horizon.blurb}
-            items={live[horizon.key]}
+            items={board.live[horizon.key]}
+            onCreate={createItem}
+            onEdit={editItem}
+            onSetStatus={setStatus}
+            onReorder={reorderItem}
             onError={onError}
           />
         ))}
       </div>
 
-      {archived.length > 0 && (
+      {board.archived.length > 0 && (
         <details className="border-t border-line-soft pt-4">
           <summary className="cursor-pointer text-sm font-medium text-muted hover:text-ink">
-            Archived ({archived.length})
+            Archived ({board.archived.length})
           </summary>
           <ul className="mt-3 flex flex-col gap-1.5">
-            {archived.map((item) => (
+            {board.archived.map((item) => (
               <li
                 key={item.id}
                 className="flex items-center justify-between gap-3 text-sm"
               >
                 <span className="text-faint line-through">{item.title}</span>
-                <ReopenButton id={item.id} onError={onError} />
+                <ReopenButton item={item} onSetStatus={setStatus} />
               </li>
             ))}
           </ul>
@@ -120,6 +370,10 @@ function FocusSection({
   label,
   blurb,
   items,
+  onCreate,
+  onEdit,
+  onSetStatus,
+  onReorder,
   onError,
 }: {
   horizon: FocusHorizon;
@@ -127,6 +381,20 @@ function FocusSection({
   label: string;
   blurb: string;
   items: FocusItem[];
+  onCreate: (
+    horizon: FocusHorizon,
+    input: FocusFormInput,
+  ) => Promise<ActionResult<{ id: string }>>;
+  onEdit: (
+    item: FocusItem,
+    input: FocusFormInput,
+  ) => Promise<ActionResult<null>>;
+  onSetStatus: (item: FocusItem, status: FocusStatus) => void;
+  onReorder: (
+    horizon: FocusHorizon,
+    item: FocusItem,
+    direction: "up" | "down",
+  ) => void;
   onError: (message: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -160,6 +428,7 @@ function FocusSection({
       {adding && (
         <AddFocusForm
           horizon={horizon}
+          onCreate={onCreate}
           onDone={() => setAdding(false)}
           onError={onError}
         />
@@ -190,6 +459,9 @@ function FocusSection({
               horizon={horizon}
               isFirst={index === 0}
               isLast={index === items.length - 1}
+              onEdit={onEdit}
+              onSetStatus={onSetStatus}
+              onReorder={onReorder}
               onError={onError}
             />
           ))}
@@ -199,34 +471,42 @@ function FocusSection({
   );
 }
 
+function readFormInput(formData: FormData): FocusFormInput {
+  const description = formData.get("description");
+  const targetDate = formData.get("targetDate");
+  return {
+    title: String(formData.get("title") ?? ""),
+    description: description ? String(description) : null,
+    targetDate: targetDate ? String(targetDate) : null,
+  };
+}
+
 function AddFocusForm({
   horizon,
+  onCreate,
   onDone,
   onError,
 }: {
   horizon: FocusHorizon;
+  onCreate: (
+    horizon: FocusHorizon,
+    input: FocusFormInput,
+  ) => Promise<ActionResult<{ id: string }>>;
   onDone: () => void;
   onError: (message: string) => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   function handleSubmit(formData: FormData) {
     setFieldErrors({});
     startTransition(async () => {
-      const result = await createFocusItemAction({
-        title: formData.get("title"),
-        description: formData.get("description") || null,
-        horizon,
-        targetDate: formData.get("targetDate") || null,
-      });
+      const result = await onCreate(horizon, readFormInput(formData));
       if (!result.ok) {
         if (result.fieldErrors) setFieldErrors(result.fieldErrors);
         else onError(result.error);
         return;
       }
-      router.refresh();
       onDone();
     });
   }
@@ -272,47 +552,42 @@ function FocusItemCard({
   horizon,
   isFirst,
   isLast,
+  onEdit,
+  onSetStatus,
+  onReorder,
   onError,
 }: {
   item: FocusItem;
   horizon: FocusHorizon;
   isFirst: boolean;
   isLast: boolean;
+  onEdit: (
+    item: FocusItem,
+    input: FocusFormInput,
+  ) => Promise<ActionResult<null>>;
+  onSetStatus: (item: FocusItem, status: FocusStatus) => void;
+  onReorder: (
+    horizon: FocusHorizon,
+    item: FocusItem,
+    direction: "up" | "down",
+  ) => void;
   onError: (message: string) => void;
 }) {
-  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  function run(promise: Promise<{ ok: boolean; error?: string }>) {
-    startTransition(async () => {
-      const result = await promise;
-      if (!result.ok && result.error) {
-        onError(result.error);
-        return;
-      }
-      router.refresh();
-    });
-  }
-
   function handleEdit(formData: FormData) {
     setFieldErrors({});
     startTransition(async () => {
-      const result = await updateFocusItemAction({
-        id: item.id,
-        title: formData.get("title"),
-        description: formData.get("description") || null,
-        targetDate: formData.get("targetDate") || null,
-      });
+      const result = await onEdit(item, readFormInput(formData));
       if (!result.ok) {
         if (result.fieldErrors) setFieldErrors(result.fieldErrors);
         else onError(result.error);
         return;
       }
       setEditing(false);
-      router.refresh();
     });
   }
 
@@ -394,32 +669,16 @@ function FocusItemCard({
         <div className="mr-1 flex items-center">
           <IconButton
             label="Move up"
-            disabled={isFirst || isPending}
-            onClick={() =>
-              run(
-                reorderFocusItemAction({
-                  id: item.id,
-                  horizon,
-                  direction: "up",
-                }),
-              )
-            }
+            disabled={isFirst}
+            onClick={() => onReorder(horizon, item, "up")}
             className="size-7"
           >
             <ChevronUp aria-hidden className="size-3.5" />
           </IconButton>
           <IconButton
             label="Move down"
-            disabled={isLast || isPending}
-            onClick={() =>
-              run(
-                reorderFocusItemAction({
-                  id: item.id,
-                  horizon,
-                  direction: "down",
-                }),
-              )
-            }
+            disabled={isLast}
+            onClick={() => onReorder(horizon, item, "down")}
             className="size-7"
           >
             <ChevronDown aria-hidden className="size-3.5" />
@@ -431,46 +690,30 @@ function FocusItemCard({
           <TextAction
             icon={<Pause aria-hidden className="size-3.5" />}
             label="Pause"
-            disabled={isPending}
-            onClick={() =>
-              run(setFocusStatusAction({ id: item.id, status: "paused" }))
-            }
+            onClick={() => onSetStatus(item, "paused")}
           />
         )}
         {item.status === "paused" && (
           <TextAction
             icon={<Play aria-hidden className="size-3.5" />}
             label="Resume"
-            disabled={isPending}
-            onClick={() =>
-              run(setFocusStatusAction({ id: item.id, status: "active" }))
-            }
+            onClick={() => onSetStatus(item, "active")}
           />
         )}
         {done ? (
           <TextAction
             icon={<RotateCcw aria-hidden className="size-3.5" />}
             label="Reopen"
-            disabled={isPending}
-            onClick={() =>
-              run(setFocusStatusAction({ id: item.id, status: "active" }))
-            }
+            onClick={() => onSetStatus(item, "active")}
           />
         ) : (
           <TextAction
             icon={<CircleCheck aria-hidden className="size-3.5" />}
             label="Complete"
-            disabled={isPending}
-            onClick={() =>
-              run(setFocusStatusAction({ id: item.id, status: "completed" }))
-            }
+            onClick={() => onSetStatus(item, "completed")}
           />
         )}
-        <TextAction
-          label="Archive"
-          disabled={isPending}
-          onClick={() => setConfirmArchive(true)}
-        />
+        <TextAction label="Archive" onClick={() => setConfirmArchive(true)} />
       </div>
 
       <ConfirmDialog
@@ -478,11 +721,10 @@ function FocusItemCard({
         title="Archive this focus?"
         description={`"${item.title}" moves to your archived list. You can reopen it later.`}
         confirmLabel="Archive"
-        loading={isPending}
         onCancel={() => setConfirmArchive(false)}
         onConfirm={() => {
           setConfirmArchive(false);
-          run(setFocusStatusAction({ id: item.id, status: "archived" }));
+          onSetStatus(item, "archived");
         }}
       />
     </li>
@@ -514,29 +756,16 @@ function TextAction({
 }
 
 function ReopenButton({
-  id,
-  onError,
+  item,
+  onSetStatus,
 }: {
-  id: string;
-  onError: (message: string) => void;
+  item: FocusItem;
+  onSetStatus: (item: FocusItem, status: FocusStatus) => void;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
   return (
     <button
       type="button"
-      disabled={isPending}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await setFocusStatusAction({ id, status: "active" });
-          if (!result.ok) {
-            onError(result.error);
-            return;
-          }
-          router.refresh();
-        })
-      }
+      onClick={() => onSetStatus(item, "active")}
       className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-[13px] font-medium text-muted hover:text-ink disabled:opacity-45"
     >
       <RotateCcw aria-hidden className="size-3.5" />
