@@ -139,6 +139,25 @@ export function CaptureBoard({
         clientToken: crypto.randomUUID(),
       }).then((r) => {
         if (r.ok) {
+          // Reconcile this exact temp row immediately with its real id —
+          // each call closes over its own tempId, so rapid captures each
+          // resolve independently without touching one another's row. The
+          // debounced refresh below still runs for authoritative counts,
+          // ordering, and pagination; it no longer has to happen just to
+          // stop showing "Saving…".
+          setPendingRows((p) =>
+            p.map((row) =>
+              row.id === tempId
+                ? {
+                    ...row,
+                    id: r.data.id,
+                    captured_at: r.data.capturedAt,
+                    created_at: r.data.capturedAt,
+                    updated_at: r.data.capturedAt,
+                  }
+                : row,
+            ),
+          );
           if (params.page > 1) {
             setParam({ page: null });
           } else {
@@ -157,16 +176,31 @@ export function CaptureBoard({
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Local, no-refresh edits (see handleEdited below) — keyed by capture id.
+  const [patches, setPatches] = useState<
+    Record<string, { content: string; categoryId: string | null }>
+  >({});
   const [snapshot, setSnapshot] = useState(result);
   if (snapshot !== result) {
     setSnapshot(result);
     setHidden(new Set());
     setBusy(new Set());
     setSelected(new Set());
+    setPatches({});
     // A fresh server result (post-create refresh, or the page-1 navigation
     // below) now carries the real record, so drop the optimistic temp row —
     // otherwise its id never matches a saved id and it lingers as a duplicate.
     setPendingRows([]);
+  }
+
+  // Local-only bump to the Inbox tab count from "Copy to Inbox", so that
+  // single action doesn't need a full-page refresh (see copyToInbox below).
+  // Reset whenever a fresh counts prop arrives from the server.
+  const [countsSnapshot, setCountsSnapshot] = useState(counts);
+  const [inboxCountDelta, setInboxCountDelta] = useState(0);
+  if (countsSnapshot !== counts) {
+    setCountsSnapshot(counts);
+    setInboxCountDelta(0);
   }
 
   function mark(id: string, on: boolean) {
@@ -241,6 +275,8 @@ export function CaptureBoard({
     });
   };
   const copyToInbox = (id: string) => {
+    // Guards against rapid/repeated clicks on the same row: once busy, a
+    // second call returns immediately and never reaches the increment below.
     if (busy.has(id)) return;
     mark(id, true);
     void copyCaptureToInboxAction({ id }).then((r) => {
@@ -250,7 +286,9 @@ export function CaptureBoard({
         return;
       }
       toast.success("Copied to your inbox as a new thought.");
-      router.refresh();
+      // The source row/tab is unaffected by this copy — only the Inbox count
+      // badge needs updating, so patch it locally instead of a full refresh.
+      setInboxCountDelta((d) => d + 1);
     });
   };
 
@@ -320,6 +358,22 @@ export function CaptureBoard({
     });
   }
 
+  // A search or category filter means the edited row may no longer belong in
+  // this result set (e.g. the edit removed the matched text, or moved it to a
+  // different category) — only a real refetch can tell, so keep the refresh.
+  // With neither filter active, the current list can't have excluded this row
+  // on content/category grounds, so a local patch is safe.
+  function handleEdited(
+    id: string,
+    patch: { content: string; categoryId: string | null },
+  ) {
+    if (params.q || params.category) {
+      router.refresh();
+      return;
+    }
+    setPatches((p) => ({ ...p, [id]: patch }));
+  }
+
   // --- URL helpers ---------------------------------------------
   const setParam = useCallback(
     (updates: Record<string, string | null>) => {
@@ -352,14 +406,30 @@ export function CaptureBoard({
   const visible = [
     ...pendingRows.filter((p) => !savedIds.has(p.id)),
     ...result.captures,
-  ].filter((c) => !hidden.has(c.id));
+  ]
+    .filter((c) => !hidden.has(c.id))
+    .map((c) => {
+      const patch = patches[c.id];
+      if (!patch) return c;
+      const category =
+        categories.find((cat) => cat.id === patch.categoryId) ?? null;
+      return {
+        ...c,
+        content: patch.content,
+        category_id: patch.categoryId,
+        category,
+      };
+    });
   const showToolbar = filter !== "inbox";
   const bulkEnabled = filter === "archived" || filter === "discarded";
 
-  const displayCounts: CaptureCounts =
-    filter === "inbox" && pendingRows.length > 0
-      ? { ...counts, inbox: counts.inbox + pendingRows.length }
-      : counts;
+  const displayCounts: CaptureCounts = {
+    ...counts,
+    inbox:
+      counts.inbox +
+      inboxCountDelta +
+      (filter === "inbox" ? pendingRows.length : 0),
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -557,7 +627,7 @@ export function CaptureBoard({
             onDelete={setDeleteId}
             onOpenTask={openTask}
             taskLoading={panelLoading}
-            onSaved={() => router.refresh()}
+            onSaved={handleEdited}
           />
           <div className="flex flex-wrap items-center gap-3 text-[13px] text-faint">
             {params.page > 1 && (

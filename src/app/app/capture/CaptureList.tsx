@@ -60,7 +60,7 @@ export function CaptureList({
   onDelete: (id: string) => void;
   onOpenTask: (taskId: string) => void;
   taskLoading: boolean;
-  onSaved: () => void;
+  onSaved: (id: string, patch: { content: string; categoryId: string | null }) => void;
 }) {
   return (
     <ul className="divide-y divide-line-soft overflow-hidden rounded-lg border border-line bg-surface">
@@ -131,7 +131,7 @@ function CaptureItem({
   onDelete: () => void;
   onOpenTask: (taskId: string) => void;
   taskLoading: boolean;
-  onSaved: () => void;
+  onSaved: (id: string, patch: { content: string; categoryId: string | null }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(capture.content);
@@ -164,7 +164,7 @@ function CaptureItem({
         return;
       }
       setEditing(false);
-      onSaved();
+      onSaved(capture.id, { content: content.trim(), categoryId: categoryId || null });
     });
   }
 

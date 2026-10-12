@@ -52,12 +52,16 @@ function revalidate() {
 
 export async function createCaptureAction(
   input: unknown,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; capturedAt: string }>> {
   const parsed = parseInput(createCaptureSchema, input);
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { user, workspace } = await requireWorkspaceContext();
+
   try {
-    const { user, workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
     const categoryId = parsed.data.categoryId ?? null;
@@ -77,12 +81,12 @@ export async function createCaptureAction(
         category_id: categoryId,
         source: "manual",
       })
-      .select("id")
+      .select("id, captured_at")
       .single();
     if (error) throw error;
 
     revalidate();
-    return actionOk({ id: data.id });
+    return actionOk({ id: data.id, capturedAt: data.captured_at });
   } catch (error) {
     return actionError(toMessage(error, "We couldn't save that capture."));
   }
