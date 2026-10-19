@@ -98,8 +98,12 @@ export async function updateCaptureAction(
   const parsed = parseInput(updateCaptureSchema, input);
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
     const categoryId = parsed.data.categoryId ?? null;
@@ -143,8 +147,12 @@ async function setStatusGuarded(
   allowedFrom: Capture["status"][],
   notThere: string,
 ): Promise<ActionResult<null>> {
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("captures")
@@ -197,8 +205,12 @@ export async function restoreCaptureAction(
   if (!parsed.success) return actionError(parsed.error);
   const id = parsed.data.id;
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
     if (restoreRpcAvailable !== false) {
@@ -274,8 +286,12 @@ export async function copyCaptureToInboxAction(
   const parsed = parseInput(copyToInboxSchema, input);
   if (!parsed.success) return actionError(parsed.error);
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { user, workspace } = await requireWorkspaceContext();
+
   try {
-    const { user, workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
     const { data: source } = await supabase
@@ -327,8 +343,12 @@ export async function deleteCaptureAction(
   const parsed = parseInput(deleteCaptureSchema, input);
   if (!parsed.success) return actionError(parsed.error);
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("captures")
@@ -358,8 +378,12 @@ export async function clearProcessedCapturesAction(
   const parsed = parseInput(clearProcessedCapturesSchema, input);
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
 
     const rpc = await supabase.rpc("workspace_clear_processed_captures", {
@@ -397,8 +421,12 @@ export async function deleteCapturesBulkAction(
   if (!parsed.success) return actionError(parsed.error, parsed.fieldErrors);
   const ids = [...new Set(parsed.data.ids)];
 
+  // Outside the try/catch on purpose: redirect() throws a Next.js
+  // control-flow signal (not a real error), and a catch below would swallow
+  // it and surface the literal "NEXT_REDIRECT" string instead of redirecting.
+  const { workspace } = await requireWorkspaceContext();
+
   try {
-    const { workspace } = await requireWorkspaceContext();
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("captures")
