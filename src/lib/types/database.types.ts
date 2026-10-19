@@ -18,7 +18,7 @@ export type Json =
 export type WorkspaceRole = "owner" | "admin" | "member" | "assistant";
 export type FocusHorizon = "short" | "medium" | "long";
 export type FocusStatus = "active" | "paused" | "completed" | "archived";
-export type CaptureSource = "manual" | "voice" | "quo" | "import";
+export type CaptureSource = "manual" | "voice" | "quo" | "import" | "email";
 export type CaptureStatus = "inbox" | "processed" | "discarded" | "archived";
 export type TaskStatus =
   | "open"
