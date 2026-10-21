@@ -100,38 +100,31 @@
   text-decoration: none;
 }
 
-.brandName {
-  font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  letter-spacing: -0.065em;
-  line-height: 1;
-  font-size: 1.35rem;
-  white-space: nowrap;
+.brandImg {
+  display: block;
+  height: 22px;
+  width: auto;
 }
 
-.brandSm .brandName {
-  font-size: 1.12rem;
+.brandSm .brandImg {
+  height: 18px;
 }
 
-.brandLg .brandName {
-  font-size: clamp(1.75rem, 1rem + 1.6vw, 2.25rem);
+.brandLg .brandImg {
+  height: clamp(44px, 26px + 3vw, 60px);
 }
 
-.brandLg .brandRule {
-  width: 44px;
+/* Public welcome header only — sized independently of the shared "md"
+   default so the in-app sidebar (also size="md") stays untouched. */
+.brandWelcome .brandImg {
+  height: clamp(56px, 32px + 3.4vw, 72px);
 }
 
-.brandAura {
-  color: #fffdf7;
-  font-weight: 600;
-}
-
-.brandOnLight .brandAura {
-  color: #081321;
-}
-
-.brandFlo {
-  color: #d9b25f;
-  font-weight: 500;
+/* The source mark is solid black on transparent — invert it to read on the
+   app's dark navy surfaces (the default placement); leave it black on the
+   light surfaces that pass variant="onLight". */
+.brandImgOnDark {
+  filter: brightness(0) invert(1);
 }
 
 .brandRule {
@@ -155,7 +148,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: clamp(1.1rem, 2.6vw, 1.7rem) 0;
+  padding: clamp(3.25rem, 6.5vw, 4.75rem) 0 clamp(1.1rem, 2.6vw, 1.7rem);
 }
 
 .headerActions {
@@ -746,6 +739,10 @@
 .authWordmarkLink {
   align-self: flex-start;
   text-decoration: none;
+  /* Extra breathing room below the larger logo, on top of .authBrand's gap,
+     so it doesn't crowd the eyebrow line beneath it. */
+  margin-bottom: clamp(0.5
+  rem, 1vw, 1rem);
 }
 
 .authBrandEyebrow {
