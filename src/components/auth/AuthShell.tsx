@@ -33,7 +33,7 @@ export function AuthShell({
             className={styles.authWordmarkLink}
             aria-label="AuraFlo home"
           >
-            <AuraFloWordmark size="lg" withRule />
+            <AuraFloWordmark size="lg" />
           </Link>
 
           <p className={styles.authBrandEyebrow}>From thoughts to direction</p>
