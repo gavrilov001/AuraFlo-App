@@ -1,6 +1,7 @@
 import { Webhook, WebhookVerificationError } from "svix";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDreamcatcherSecrets } from "@/lib/secrets/dreamcatcher";
+import { createDreamcatcherAdminClient } from "@/lib/supabase/dreamcatcher-admin";
 
 // Resend signs webhooks with Svix. Verifying here means the raw body must be
 // read as text (not JSON) before any parsing happens — see
@@ -42,7 +43,7 @@ function buildCaptureContent(subject: string | null | undefined, body: string | 
 }
 
 async function findUserIdByEmail(
-  admin: ReturnType<typeof createAdminClient>,
+  admin: Awaited<ReturnType<typeof createDreamcatcherAdminClient>>,
   email: string,
 ): Promise<string | null> {
   const perPage = 200;
@@ -57,7 +58,7 @@ async function findUserIdByEmail(
 }
 
 async function resolveWorkspaceId(
-  admin: ReturnType<typeof createAdminClient>,
+  admin: Awaited<ReturnType<typeof createDreamcatcherAdminClient>>,
   userId: string,
 ): Promise<string | null> {
   const { data, error } = await admin
@@ -71,11 +72,7 @@ async function resolveWorkspaceId(
   return data?.workspace_id ?? null;
 }
 
-async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing environment variable RESEND_API_KEY.");
-  }
+async function fetchReceivedEmail(emailId: string, apiKey: string): Promise<ReceivedEmail> {
   const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
@@ -87,12 +84,6 @@ async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) {
-    console.error("resend webhook: RESEND_WEBHOOK_SECRET is not configured");
-    return new Response(null, { status: 500 });
-  }
-
   const rawBody = await request.text();
   const svixHeaders = {
     "svix-id": request.headers.get("svix-id") ?? "",
@@ -100,8 +91,16 @@ export async function POST(request: Request): Promise<Response> {
     "svix-signature": request.headers.get("svix-signature") ?? "",
   };
 
+  let secrets;
   try {
-    new Webhook(secret).verify(rawBody, svixHeaders);
+    secrets = await getDreamcatcherSecrets();
+  } catch (error) {
+    console.error("resend webhook: failed to resolve Dreamcatcher secrets", error);
+    return new Response(null, { status: 500 });
+  }
+
+  try {
+    new Webhook(secrets.resendWebhookSecret).verify(rawBody, svixHeaders);
   } catch (error) {
     if (error instanceof WebhookVerificationError) {
       console.warn("resend webhook: signature verification failed");
@@ -129,9 +128,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const senderEmail = extractEmailAddress(from);
-  const admin = createAdminClient();
 
   try {
+    const admin = await createDreamcatcherAdminClient();
+
     const userId = await findUserIdByEmail(admin, senderEmail);
     if (!userId) {
       console.warn("resend webhook: no AuraFlo user found for sender");
@@ -144,7 +144,7 @@ export async function POST(request: Request): Promise<Response> {
       return new Response(null, { status: 200 });
     }
 
-    const { text, html } = await fetchReceivedEmail(emailId);
+    const { text, html } = await fetchReceivedEmail(emailId, secrets.resendApiKey);
     const body = text ?? (html ? htmlToPlainText(html) : null);
     const content = buildCaptureContent(subject, body);
     if (!content) {
