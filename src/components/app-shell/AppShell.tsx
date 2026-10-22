@@ -123,6 +123,7 @@ function SidebarInner({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-current={active ? "page" : undefined}
               onClick={onNavigate}
               className={cn(
