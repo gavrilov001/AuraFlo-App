@@ -31,6 +31,27 @@ export function uniqueTitle(prefix: string): string {
 }
 
 /**
+ * Signs up a brand-new, disposable account and returns its credentials.
+ * Use this — never the shared E2E_OWNER account via login() — for any test
+ * that changes a password: mutating the shared owner's password would break
+ * every other spec file's login() call for the rest of the run.
+ */
+export async function signUpFresh(
+  page: Page,
+): Promise<{ email: string; password: string }> {
+  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.invalid`;
+  const password = "E2E-Fresh-Password-1234!";
+  await page.goto("/signup");
+  await page.getByLabel("Full name").fill("E2E Fresh");
+  await page.getByLabel("Email").fill(email);
+  await page.getByRole("textbox", { name: "Password", exact: true }).fill(password);
+  await page.getByRole("textbox", { name: "Confirm password" }).fill(password);
+  await page.getByRole("button", { name: "Create my account" }).click();
+  await expect(page).toHaveURL(/\/app\/capture/, { timeout: 15_000 });
+  return { email, password };
+}
+
+/**
  * Ensures a fresh Start My Day ritual is available for "today" before a test
  * walks through it. The E2E owner account is shared and persists across
  * test runs within the same calendar day, so state an earlier test left

@@ -131,9 +131,17 @@ export async function requestPasswordResetAction(
   }
 
   const supabase = await createClient();
-  await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password`,
-  });
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    parsed.data.email,
+    { redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password` },
+  );
+  // Log server-side only (e.g. SMTP misconfiguration, rate limiting) —
+  // the client always sees the same neutral outcome below regardless of
+  // what happened, so this never becomes an oracle for whether the email
+  // is registered.
+  if (error) {
+    console.error("requestPasswordResetAction: resetPasswordForEmail failed", error);
+  }
 
   // Always report success so we never reveal whether an account exists.
   return actionOk({ sent: true });
@@ -168,7 +176,26 @@ export async function updatePasswordAction(
     return actionError(toMessage(error, "We couldn't update your password."));
   }
 
-  redirect("/app");
+  // The recovery session has done its job once the password is changed —
+  // sign it out so the user lands back at /login rather than being carried
+  // straight into the app on a session that only existed to authorize this
+  // one action. @supabase/ssr clears the session cookies as part of this
+  // call before it attempts the network-side revoke, so the user is signed
+  // out locally even if that revoke call itself fails; we only log that case
+  // rather than blocking the (already-succeeded) password change on it.
+  const { error: signOutError } = await supabase.auth.signOut();
+  if (signOutError) {
+    console.error("updatePasswordAction: signOut failed", signOutError);
+  }
+
+  // Redirect rather than returning action state: a Server Action that
+  // returns state in place triggers Next.js to refresh this route's Server
+  // Components afterward, and /update-password's own page-level session
+  // gate would then see the just-cleared session and swap to "link expired"
+  // out from under the success UI. Navigating to a fresh URL instead renders
+  // the destination deliberately, with the success marker taking priority
+  // over that gate (see update-password/page.tsx).
+  redirect("/update-password?reset=success");
 }
 
 export async function signOutAction(): Promise<void> {

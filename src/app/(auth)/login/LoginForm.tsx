@@ -9,11 +9,21 @@ import { AuthPasswordField } from "@/components/auth/AuthPasswordField";
 import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
 import styles from "@/components/welcome/welcome.module.css";
 
-export function LoginForm({ redirectTo }: { redirectTo?: string }) {
+export function LoginForm({
+  redirectTo,
+  callbackError,
+}: {
+  redirectTo?: string;
+  callbackError?: string;
+}) {
   const [state, formAction] = useActionState(signInAction, null);
   const fieldErrors = state?.ok === false ? state.fieldErrors : undefined;
   const formError =
     state?.ok === false && !state.fieldErrors ? state.error : undefined;
+  // Once the user has actually submitted the form, its own result takes
+  // over — a stale "your link expired" from the URL shouldn't linger once
+  // they're interacting with (or have corrected) a real attempt.
+  const displayError = state ? formError : callbackError;
 
   return (
     <>
@@ -21,9 +31,9 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
         {redirectTo && (
           <input type="hidden" name="redirectTo" value={redirectTo} />
         )}
-        {formError && (
+        {displayError && (
           <p className={styles.authAlert} role="alert">
-            {formError}
+            {displayError}
           </p>
         )}
 
@@ -42,6 +52,11 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
           required
           error={fieldErrors?.password}
         />
+        <p style={{ textAlign: "right", margin: 0 }}>
+          <Link href="/forgot-password" className={styles.authLinkBack}>
+            Forgot password?
+          </Link>
+        </p>
 
         <AuthSubmitButton>Sign in</AuthSubmitButton>
       </form>
