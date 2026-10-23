@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
 import { TextField } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { useToast } from "@/components/ui/Toast";
 import { updateWorkspaceAction } from "./actions";
 
 export function WorkspaceForm({
@@ -14,8 +15,15 @@ export function WorkspaceForm({
   initialName: string;
   canEdit: boolean;
 }) {
+  const toast = useToast();
   const [state, formAction] = useActionState(updateWorkspaceAction, null);
-  const showSaved = state?.ok === true;
+  const lastHandled = useRef(state);
+
+  useEffect(() => {
+    if (state === lastHandled.current) return;
+    lastHandled.current = state;
+    if (state?.ok) toast.success("Workspace updated.");
+  }, [state, toast]);
 
   const fieldErrors = state?.ok === false ? state.fieldErrors : undefined;
   const formError =
@@ -36,7 +44,6 @@ export function WorkspaceForm({
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
-      {showSaved && <FormMessage tone="success">Workspace updated.</FormMessage>}
 
       <TextField
         label="Workspace name"

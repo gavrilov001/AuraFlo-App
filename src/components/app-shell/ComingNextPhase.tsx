@@ -1,47 +1,40 @@
-import { EmptyState } from "@/components/ui/Surface";
+import { PageHeader } from "@/components/ui/PageHeader";
 
-interface ComingNextPhaseProps {
+interface PlannedPageProps {
   title: string;
-  summary: string;
+  description: string;
   points: string[];
-  icon: React.ReactNode;
 }
 
+/** Quiet editorial placeholder for routes whose feature isn't built yet. */
 export function ComingNextPhase({
   title,
-  summary,
+  description,
   points,
-  icon,
-}: ComingNextPhaseProps) {
+}: PlannedPageProps) {
   return (
-    <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
-          {title}
-        </h1>
-        <p className="mt-1 text-sm text-ink-muted">{summary}</p>
-      </header>
+    <div className="flex flex-col gap-8">
+      <PageHeader title={title} subtitle={description} note="Planned" />
 
-      <EmptyState
-        icon={icon}
-        title="Coming in the next phase"
-        description="This section isn't wired up yet. Here's what it will do:"
-      />
-
-      <ul className="flex flex-col gap-2">
-        {points.map((point) => (
-          <li
-            key={point}
-            className="flex items-start gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-muted"
-          >
-            <span
-              aria-hidden
-              className="mt-1.5 inline-block size-1.5 shrink-0 rounded-full bg-amber"
-            />
-            {point}
-          </li>
-        ))}
-      </ul>
+      <div className="border-t border-line-soft pt-6">
+        <p className="text-[15px] text-muted">
+          This part of AuraFlo isn&rsquo;t here yet. When it arrives, it will:
+        </p>
+        <ul className="mt-3 flex max-w-xl flex-col gap-2.5">
+          {points.map((point) => (
+            <li
+              key={point}
+              className="flex items-start gap-3 text-[15px] text-body"
+            >
+              <span
+                aria-hidden
+                className="mt-2 size-1 shrink-0 rounded-full bg-faint"
+              />
+              {point}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

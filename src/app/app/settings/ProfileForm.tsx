@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
 import { TextField, SelectField } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { useToast } from "@/components/ui/Toast";
 import { updateProfileAction } from "./actions";
 
 export function ProfileForm({
@@ -16,8 +17,15 @@ export function ProfileForm({
   initialTimezone: string;
   timezones: string[];
 }) {
+  const toast = useToast();
   const [state, formAction] = useActionState(updateProfileAction, null);
-  const showSaved = state?.ok === true;
+  const lastHandled = useRef(state);
+
+  useEffect(() => {
+    if (state === lastHandled.current) return;
+    lastHandled.current = state;
+    if (state?.ok) toast.success("Profile saved.");
+  }, [state, toast]);
 
   const fieldErrors = state?.ok === false ? state.fieldErrors : undefined;
   const formError =
@@ -30,7 +38,6 @@ export function ProfileForm({
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
-      {showSaved && <FormMessage tone="success">Profile saved.</FormMessage>}
 
       <TextField
         label="Full name"

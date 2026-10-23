@@ -1,0 +1,10 @@
+#!/bin/sh
+# Reject commits whose author/committer identity is Claude or Anthropic.
+for v in "$(git var GIT_AUTHOR_IDENT)" "$(git var GIT_COMMITTER_IDENT)"; do
+  case "$v" in
+    *[Cc]laude*|*[Aa]nthropic*)
+      echo "pre-commit hook: refusing commit — author/committer identity is Claude/Anthropic." >&2
+      exit 1 ;;
+  esac
+done
+exit 0

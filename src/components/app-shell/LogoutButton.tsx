@@ -11,17 +11,21 @@ export function LogoutButton({
   variant?: "nav" | "button";
 }) {
   return (
-    <form action={signOutAction}>
+    <form
+      action={signOutAction}
+      className={variant === "nav" ? "contents" : undefined}
+    >
       <button
         type="submit"
         className={cn(
+          "inline-flex items-center gap-2 rounded-md text-sm font-medium transition-colors",
           variant === "nav"
-            ? "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
-            : "inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-sunken",
+            ? "px-2.5 py-2 text-[13px] text-muted hover:bg-surface-hover hover:text-ink"
+            : "h-11 border border-line bg-surface px-5 text-ink hover:bg-surface-hover",
         )}
       >
         <LogOut aria-hidden className="size-4" />
-        Logout
+        Log out
       </button>
     </form>
   );
