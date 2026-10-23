@@ -15,6 +15,9 @@ test.describe("All Tasks", () => {
     await panel.getByLabel("Title").fill(title);
     await panel.getByLabel("Notes").fill("E2E task notes");
     await panel.getByRole("button", { name: "Add task" }).click();
+    // Same pattern as the edit flow below — the panel only closes once the
+    // create action resolves, so wait for that instead of racing it.
+    await expect(panel).toBeHidden();
     await expect(page.getByText(title, { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText(title, { exact: true })).toBeVisible();
@@ -23,6 +26,10 @@ test.describe("All Tasks", () => {
     const editPanel = page.getByRole("dialog", { name: "Edit task" });
     await editPanel.getByLabel("Notes").fill("E2E task notes edited");
     await editPanel.getByRole("button", { name: "Save" }).click();
+    // Save closes the panel only once the update action resolves — wait for
+    // that instead of reloading immediately, or the reload can race ahead of
+    // the write and read back the pre-edit value.
+    await expect(editPanel).toBeHidden();
     await page.reload();
     await page.getByRole("button", { name: title }).click();
     await expect(page.getByRole("dialog", { name: "Edit task" }).getByLabel("Notes")).toHaveValue("E2E task notes edited");
