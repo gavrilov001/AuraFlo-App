@@ -7,7 +7,7 @@ export function WelcomeHeader() {
   return (
     <header className={styles.header}>
       <Link href="/" aria-label="AuraFlo home">
-        <AuraFloWordmark className={styles.brandWelcome} />
+        <AuraFloWordmark withRule />
       </Link>
 
       <div className={styles.headerActions}>

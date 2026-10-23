@@ -38,85 +38,63 @@ export async function signInAction(
     return actionError(parsed.error, parsed.fieldErrors);
   }
 
-  let authError: unknown;
-  try {
-    const supabase = await createClient();
-    const result = await supabase.auth.signInWithPassword({
-      email: parsed.data.email,
-      password: parsed.data.password,
-    });
-    authError = result.error;
-  } catch {
-    return actionError(
-      "We couldn't reach the server. Check your connection and try again.",
-    );
-  }
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
 
-  if (authError) {
-    return actionError("That email or password isn't right. Please try again.");
+  if (error) {
+    if (error.message.toLowerCase().includes("email not confirmed")) {
+      return actionError(
+        "Please confirm your email address first — check your inbox for the link.",
+      );
+    }
+    return actionError("That email and password combination doesn't match.");
   }
 
   redirect(safeRedirectPath(parsed.data.redirectTo));
 }
 
 export async function signUpAction(
-  _prev: ActionResult<null> | null,
+  _prev: ActionResult<{ needsConfirmation: boolean }> | null,
   formData: FormData,
-): Promise<ActionResult<null>> {
+): Promise<ActionResult<{ needsConfirmation: boolean }>> {
   const parsed = parseInput(signupSchema, {
     fullName: formData.get("fullName"),
     email: formData.get("email"),
     password: formData.get("password"),
-    confirmPassword: formData.get("confirmPassword"),
   });
   if (!parsed.success) {
     return actionError(parsed.error, parsed.fieldErrors);
   }
 
   const supabase = await createClient();
-  let data: Awaited<ReturnType<typeof supabase.auth.signUp>>["data"];
-  let error: Awaited<ReturnType<typeof supabase.auth.signUp>>["error"];
-  try {
-    ({ data, error } = await supabase.auth.signUp({
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: {
-        data: { full_name: parsed.data.fullName },
-      },
-    }));
-  } catch {
-    return actionError(
-      "We couldn't reach the server. Check your connection and try again.",
-    );
-  }
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+      data: { full_name: parsed.data.fullName },
+    },
+  });
 
   if (error) {
-    const message = error.message.toLowerCase();
-    if (
-      message.includes("already registered") ||
-      message.includes("already exists") ||
-      error.code === "user_already_exists"
-    ) {
+    if (error.message.toLowerCase().includes("already registered")) {
       return actionError(
         "An account with this email already exists. Try signing in instead.",
       );
     }
-    if (message.includes("password")) {
-      return actionError(
-        "Please choose a stronger password — at least 8 characters.",
-      );
-    }
-    return actionError("We couldn't create your account. Please try again.");
+    return actionError(toMessage(error, "We couldn't create your account."));
   }
 
-  // Email confirmation is disabled, so Supabase returns a session right away.
-  // The database trigger provisions the profile and personal workspace; the
-  // /app layout shows a brief holding state if that hasn't landed yet.
-  if (!data.session) {
-    return actionError("Your account is ready. Please sign in to continue.");
+  // The database trigger provisions the profile, workspace, membership and
+  // default categories — nothing to do here.
+  if (data.session) {
+    redirect("/app");
   }
 
-  redirect("/app/capture");
+  return actionOk({ needsConfirmation: true });
 }
 
 export async function requestPasswordResetAction(

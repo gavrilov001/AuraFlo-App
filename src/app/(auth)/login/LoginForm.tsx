@@ -1,13 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 
 import { signInAction } from "../actions";
-import { AuthField } from "@/components/auth/AuthField";
-import { AuthPasswordField } from "@/components/auth/AuthPasswordField";
-import { AuthSubmitButton } from "@/components/auth/AuthSubmitButton";
-import styles from "@/components/welcome/welcome.module.css";
+import { TextField } from "@/components/ui/Field";
+import { PasswordField } from "@/components/ui/PasswordField";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { FormMessage } from "@/components/ui/FormMessage";
 
 export function LoginForm({ redirectTo }: { redirectTo?: string }) {
   const [state, formAction] = useActionState(signInAction, null);
@@ -16,44 +15,29 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
     state?.ok === false && !state.fieldErrors ? state.error : undefined;
 
   return (
-    <>
-      <form action={formAction} className={styles.authForm} noValidate>
-        {redirectTo && (
-          <input type="hidden" name="redirectTo" value={redirectTo} />
-        )}
-        {formError && (
-          <p className={styles.authAlert} role="alert">
-            {formError}
-          </p>
-        )}
+    <form action={formAction} className="flex flex-col gap-4" noValidate>
+      {redirectTo && (
+        <input type="hidden" name="redirectTo" value={redirectTo} />
+      )}
+      {formError && <FormMessage tone="error">{formError}</FormMessage>}
 
-        <AuthField
-          label="Email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          error={fieldErrors?.email}
-        />
-        <AuthPasswordField
-          label="Password"
-          name="password"
-          autoComplete="current-password"
-          required
-          error={fieldErrors?.password}
-        />
+      <TextField
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        error={fieldErrors?.email}
+      />
+      <PasswordField
+        label="Password"
+        name="password"
+        autoComplete="current-password"
+        required
+        error={fieldErrors?.password}
+      />
 
-        <AuthSubmitButton>Sign in</AuthSubmitButton>
-      </form>
-
-      <div className={styles.authLinks}>
-        <Link href="/signup" className={styles.authLinkPrimary}>
-          New to AuraFlo? <strong>Create your account</strong>
-        </Link>
-        <Link href="/" className={styles.authLinkBack}>
-          <span aria-hidden>&larr;</span> Back to AuraFlo
-        </Link>
-      </div>
-    </>
+      <SubmitButton className="mt-1 w-full">Sign in</SubmitButton>
+    </form>
   );
 }

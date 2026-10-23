@@ -5,12 +5,10 @@ import { forwardRef, useId } from "react";
 import { cn } from "@/lib/utils/cn";
 
 const controlClass =
-  "w-full rounded-md border border-line bg-surface px-3 text-[15px] text-ink " +
-  "placeholder:text-faint transition-colors [color-scheme:light] " +
-  "focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30 " +
+  "w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-ink " +
+  "placeholder:text-ink-subtle shadow-soft transition-colors " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-evergreen " +
   "aria-[invalid=true]:border-danger disabled:opacity-60";
-
-const inputHeight = "h-11";
 
 interface FieldShellProps {
   label: string;
@@ -27,13 +25,11 @@ function FieldShell({ label, htmlFor, error, hint, children }: FieldShellProps) 
         {label}
       </label>
       {children}
-      {hint && !error && <p className="text-[13px] text-muted">{hint}</p>}
+      {hint && !error && (
+        <p className="text-xs text-ink-muted">{hint}</p>
+      )}
       {error && (
-        <p
-          id={`${htmlFor}-error`}
-          className="text-[13px] font-medium text-danger"
-          role="alert"
-        >
+        <p className="text-xs font-medium text-danger" role="alert">
           {error}
         </p>
       )}
@@ -59,7 +55,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
           id={fieldId}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${fieldId}-error` : undefined}
-          className={cn(controlClass, inputHeight, className)}
+          className={cn(controlClass, className)}
           {...props}
         />
       </FieldShell>
@@ -86,12 +82,7 @@ export const TextAreaField = forwardRef<
         ref={ref}
         id={fieldId}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${fieldId}-error` : undefined}
-        className={cn(
-          controlClass,
-          "min-h-24 py-2.5 leading-relaxed resize-y",
-          className,
-        )}
+        className={cn(controlClass, "min-h-24 resize-y", className)}
         {...props}
       />
     </FieldShell>
@@ -119,8 +110,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
           ref={ref}
           id={fieldId}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${fieldId}-error` : undefined}
-          className={cn(controlClass, inputHeight, "pr-9", className)}
+          className={cn(controlClass, "pr-8", className)}
           {...props}
         >
           {children}
