@@ -18,7 +18,13 @@ test.describe("authentication", () => {
   test("owner can sign in and log out", async ({ page }, testInfo) => {
     test.skip(!credentials(), "Set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run authenticated E2E tests.");
     await login(page, testInfo);
-    await expect(page.getByRole("link", { name: /Dream Catcher/ })).toBeVisible();
+    // The regex form also matches the sidebar wordmark's
+    // aria-label="AuraFlo — Dream Catcher" — scope to the actual nav link.
+    await expect(
+      page
+        .getByRole("navigation", { name: "Primary" })
+        .getByRole("link", { name: "Dream Catcher", exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login$/);
   });

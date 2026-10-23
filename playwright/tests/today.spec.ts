@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { login, uniqueTitle } from "../support/auth";
+import { login, resetPlanningDay, uniqueTitle } from "../support/auth";
 
 async function prepareToday(page: Page, title: string): Promise<void> {
   await page.goto("/app/capture");
@@ -18,6 +18,7 @@ async function prepareToday(page: Page, title: string): Promise<void> {
 test.describe("Today", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await login(page, testInfo);
+    await resetPlanningDay(page);
   });
 
   test("shows planned work and separates Top priorities from other tasks", async ({ page }) => {

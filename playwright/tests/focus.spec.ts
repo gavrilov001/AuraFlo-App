@@ -28,10 +28,16 @@ test.describe("Focus", () => {
     const section = page.getByRole("region", { name: "Now" });
     const card = section.locator("li").filter({ hasText: title }).first();
     await card.getByRole("button", { name: "Edit" }).click();
-    await card.getByLabel("Title").fill(edited);
-    await card.getByRole("button", { name: "Save" }).click();
+    // Once editing, the card's title is an <input value>, not text content —
+    // `card` (matched by hasText) no longer resolves to anything, so scope
+    // the edit-form fields to the section instead of the now-stale `card`.
+    const titleField = section.getByLabel("Title");
+    await expect(titleField).toBeVisible();
+    await titleField.fill(edited);
+    await section.getByRole("button", { name: "Save" }).click();
     await expect(section.getByText(edited, { exact: true })).toBeVisible();
-    await card.getByRole("button", { name: "Archive" }).click();
+    const editedCard = section.locator("li").filter({ hasText: edited }).first();
+    await editedCard.getByRole("button", { name: "Archive" }).click();
     const dialog = page.getByRole("dialog");
     if (await dialog.isVisible()) {
       await dialog.getByRole("button", { name: "Archive" }).click();

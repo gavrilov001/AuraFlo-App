@@ -47,7 +47,11 @@ export function AppShell({
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Mobile header — navy brand strip */}
           <header className="flex h-14 shrink-0 items-center justify-between bg-navy-900 px-4 md:hidden">
-            <Link href="/app/capture" aria-label="AuraFlo — Dream Catcher">
+            <Link
+              href="/app/capture"
+              prefetch={false}
+              aria-label="AuraFlo — Dream Catcher"
+            >
               <AuraFloWordmark size="sm" />
             </Link>
             <button
@@ -99,6 +103,7 @@ function SidebarInner({
     <div className="flex h-full flex-col p-3.5">
       <Link
         href="/app/capture"
+        prefetch={false}
         aria-label="AuraFlo — Dream Catcher"
         onClick={onNavigate}
         className="rounded-md px-2 py-1"
@@ -123,6 +128,7 @@ function SidebarInner({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-current={active ? "page" : undefined}
               onClick={onNavigate}
               className={cn(

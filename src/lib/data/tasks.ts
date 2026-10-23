@@ -68,25 +68,29 @@ async function getTodayPlanItems(
   byTask: Map<string, { is_top_three: boolean }>;
 }> {
   const planDate = localDateFor(timezone);
+  // Single embedded-select round trip instead of a plan lookup followed by a
+  // dependent daily_plan_items lookup — PostgREST still enforces RLS on the
+  // embedded daily_plan_items rows exactly as it would for a separate query.
   const { data: plan } = await supabase
     .from("daily_plans")
-    .select("id, status")
+    .select("id, status, daily_plan_items(task_id, is_top_three)")
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
     .eq("plan_date", planDate)
-    .maybeSingle();
+    .maybeSingle()
+    .returns<{
+      id: string;
+      status: string;
+      daily_plan_items: { task_id: string; is_top_three: boolean }[];
+    }>();
 
   const byTask = new Map<string, { is_top_three: boolean }>();
   if (!plan) return { plan: null, byTask };
 
-  const { data: items } = await supabase
-    .from("daily_plan_items")
-    .select("task_id, is_top_three")
-    .eq("daily_plan_id", plan.id);
-  for (const it of items ?? []) {
+  for (const it of plan.daily_plan_items ?? []) {
     byTask.set(it.task_id, { is_top_three: it.is_top_three });
   }
-  return { plan, byTask };
+  return { plan: { id: plan.id, status: plan.status }, byTask };
 }
 
 export async function listTasks(
