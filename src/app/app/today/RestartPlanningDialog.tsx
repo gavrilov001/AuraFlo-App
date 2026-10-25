@@ -57,6 +57,7 @@ export function RestartPlanningDialog({
         setError(result.error);
         return;
       }
+      close();
       toast.success("Planning restarted. Back to Step 1 — clear the inbox.");
       router.push(result.data.redirectTo);
       router.refresh();

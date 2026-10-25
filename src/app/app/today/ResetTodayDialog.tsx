@@ -55,6 +55,7 @@ export function ResetTodayDialog({
         setError(result.error);
         return;
       }
+      close();
       toast.success(
         "Today has been reset. Your restored thoughts are ready to review.",
       );
