@@ -130,17 +130,27 @@ export async function requestPasswordResetAction(
     return actionError(parsed.error, parsed.fieldErrors);
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(
-    parsed.data.email,
-    { redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password` },
-  );
-  // Log server-side only (e.g. SMTP misconfiguration, rate limiting) —
-  // the client always sees the same neutral outcome below regardless of
-  // what happened, so this never becomes an oracle for whether the email
-  // is registered.
-  if (error) {
-    console.error("requestPasswordResetAction: resetPasswordForEmail failed", error);
+  // getSiteUrl() now throws if NEXT_PUBLIC_SITE_URL is missing in a
+  // production build (see its own comment) — previously this silently sent
+  // a localhost reset link instead. A thrown config error must be handled
+  // exactly like any other failure below: logged server-side only, never
+  // surfaced to the client (which would otherwise both crash this action
+  // and risk becoming an oracle for whether the email is registered).
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      parsed.data.email,
+      { redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password` },
+    );
+    // Log server-side only (e.g. SMTP misconfiguration, rate limiting) —
+    // the client always sees the same neutral outcome below regardless of
+    // what happened, so this never becomes an oracle for whether the email
+    // is registered.
+    if (error) {
+      console.error("requestPasswordResetAction: resetPasswordForEmail failed", error);
+    }
+  } catch (error) {
+    console.error("requestPasswordResetAction: failed to send reset email", error);
   }
 
   // Always report success so we never reveal whether an account exists.
