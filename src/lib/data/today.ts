@@ -69,33 +69,48 @@ export async function getResetPreview(
     };
   }
 
-  const [items, sessionTasks, sessionCaptures] = await Promise.all([
-    supabase
-      .from("daily_plan_items")
-      .select("id, is_top_three, task:tasks(status, origin_daily_plan_id)")
-      .eq("daily_plan_id", plan.id)
-      .returns<
-        {
-          id: string;
-          is_top_three: boolean;
-          task: { status: string; origin_daily_plan_id: string | null } | null;
-        }[]
-      >(),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
-      .eq("origin_daily_plan_id", plan.id),
-    supabase
-      .from("captures")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
-      .eq("processed_in_daily_plan_id", plan.id),
-  ]);
+  const [items, sessionTasks, sessionCapturesRestorable, sessionCapturesAny] =
+    await Promise.all([
+      supabase
+        .from("daily_plan_items")
+        .select("id, is_top_three, task:tasks(status, origin_daily_plan_id)")
+        .eq("daily_plan_id", plan.id)
+        .returns<
+          {
+            id: string;
+            is_top_three: boolean;
+            task: { status: string; origin_daily_plan_id: string | null } | null;
+          }[]
+        >(),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("origin_daily_plan_id", plan.id),
+      // Matches reset_workspace_daily_plan's own restore condition exactly —
+      // only 'processed' captures actually come back; a 'discarded' one tied
+      // to this plan stays discarded and must not inflate this preview count.
+      supabase
+        .from("captures")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("processed_in_daily_plan_id", plan.id)
+        .eq("status", "processed"),
+      // Unfiltered by status — used only to detect a legacy (pre-session-
+      // tracking) plan. A plan whose only tracked capture was discarded is
+      // still a fully-tracked modern plan, not a legacy one, even though
+      // restoredCaptures above is correctly 0 for it.
+      supabase
+        .from("captures")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("processed_in_daily_plan_id", plan.id),
+    ]);
 
   if (items.error) throw items.error;
   if (sessionTasks.error) throw sessionTasks.error;
-  if (sessionCaptures.error) throw sessionCaptures.error;
+  if (sessionCapturesRestorable.error) throw sessionCapturesRestorable.error;
+  if (sessionCapturesAny.error) throw sessionCapturesAny.error;
 
   const rows = items.data ?? [];
   const planItems = rows.length;
@@ -110,16 +125,17 @@ export async function getResetPreview(
   const topThree = rows.filter((r) => r.is_top_three).length;
 
   const sTasks = sessionTasks.count ?? 0;
-  const sCaptures = sessionCaptures.count ?? 0;
+  const sCapturesRestorable = sessionCapturesRestorable.count ?? 0;
+  const sCapturesAny = sessionCapturesAny.count ?? 0;
 
   return {
     planItems,
     sessionTasks: sTasks,
-    restoredCaptures: sCaptures,
+    restoredCaptures: sCapturesRestorable,
     completedPreexisting,
     completedInPlan,
     topThree,
-    legacyUntracked: planItems > 0 && sTasks === 0 && sCaptures === 0,
+    legacyUntracked: planItems > 0 && sTasks === 0 && sCapturesAny === 0,
   };
 }
 
