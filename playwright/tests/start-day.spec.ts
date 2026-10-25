@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { login, resetPlanningDay, uniqueTitle } from "../support/auth";
+import { login, reloadUntilHidden, resetPlanningDay, uniqueTitle } from "../support/auth";
 
 async function createCapture(page: Page, title: string): Promise<void> {
   await page.goto("/app/capture");
@@ -70,8 +70,11 @@ test.describe("Start My Day", () => {
     // copy ("They won't become tasks... Discarded thoughts...") — match the
     // actual toast text specifically.
     await expect(page.getByText(/thoughts? discarded/i)).toBeVisible();
-    await page.reload();
-    await expect(page.getByText(discardTitle, { exact: true })).toHaveCount(0);
+    // The toast is optimistic, same as everywhere else in this app — it can
+    // fire before the server write actually lands, so a single reload right
+    // after can race ahead of it and read back stale, not-yet-discarded
+    // state. Retry a few real reloads instead of trusting the first one.
+    await reloadUntilHidden(page, page.getByText(discardTitle, { exact: true }));
   });
 
   test("batch organize opens schedule and delegate forms", async ({ page }) => {

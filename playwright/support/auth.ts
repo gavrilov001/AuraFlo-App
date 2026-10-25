@@ -1,4 +1,79 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
+
+/**
+ * Many mutations in this app are optimistic client-side, with the actual
+ * server write (Server Action / RPC round trip) landing some real,
+ * occasionally-not-trivial time after the UI already reflects the change —
+ * a toast or an optimistic hide is not proof the write has landed. A single
+ * `page.reload()` right after one of those can race ahead of it and read
+ * back stale server state. These retry a real reload a bounded number of
+ * times — each attempt reflects genuine server state at that instant, so
+ * this surfaces a real regression (by still failing after every attempt)
+ * rather than papering over one with a blind sleep.
+ */
+async function reloadUntil(
+  page: Page,
+  check: () => Promise<boolean>,
+  attempts = 10,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (await check()) return;
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+  }
+}
+
+/**
+ * A Link click right after a fresh page load can occasionally be swallowed
+ * pre-hydration — React hasn't attached the client router's click handler
+ * yet, so the click lands on an inert anchor and nothing navigates
+ * (confirmed directly: clicking a tab as the very first interaction on a
+ * freshly loaded page, with no other action involved, can silently no-op;
+ * a second click on the same tab works). Verifies the URL actually changed
+ * as expected and retries the click itself — not a reload — since reloading
+ * a URL the first click never left doesn't help.
+ */
+export async function clickTab(
+  page: Page,
+  locator: Locator,
+  urlIncludes: string,
+  attempts = 3,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    await locator.click();
+    try {
+      await page.waitForURL((url) => url.toString().includes(urlIncludes), {
+        timeout: 2_000,
+      });
+      return;
+    } catch {
+      // Swallowed click — retry.
+    }
+  }
+  await expect(page).toHaveURL(new RegExp(urlIncludes.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+}
+
+export async function reloadUntilVisible(
+  page: Page,
+  locator: Locator,
+  attempts = 10,
+): Promise<void> {
+  await reloadUntil(page, () => locator.isVisible().catch(() => false), attempts);
+  await expect(locator).toBeVisible();
+}
+
+export async function reloadUntilHidden(
+  page: Page,
+  locator: Locator,
+  attempts = 10,
+): Promise<void> {
+  await reloadUntil(
+    page,
+    async () => !(await locator.isVisible().catch(() => false)),
+    attempts,
+  );
+  await expect(locator).toBeHidden();
+}
 
 export function credentials(): { email: string; password: string } | null {
   const email = process.env.E2E_OWNER_EMAIL;
@@ -125,7 +200,12 @@ export async function resetPlanningDay(page: Page): Promise<void> {
   // Wait for the review area to resolve into one of its two terminal states
   // (something to review, or none) instead of sampling it at a single instant.
   const batchButton = page.getByRole("button", { name: "Batch organize" });
-  const inboxClear = page.getByRole("heading", { name: "Nothing waiting in your inbox." });
+  // Two different empty-state headings depending on whether this session
+  // ever had anything to review (InboxClearState.tsx's `hadNone` branch) —
+  // match either.
+  const inboxClear = page.getByRole("heading", {
+    name: /Nothing waiting in your inbox\.|Your inbox is clear\./,
+  });
   await expect(batchButton.or(inboxClear)).toBeVisible({ timeout: 10_000 });
   if (!(await batchButton.isVisible().catch(() => false))) return; // inbox already clear
 
@@ -140,16 +220,22 @@ export async function resetPlanningDay(page: Page): Promise<void> {
     await confirmDialog.getByRole("button", { name: /Discard/ }).click();
   }
   // The discard is optimistic client-side, same as everywhere else in this
-  // app — the empty-state text (or even the capture disappearing) can show
-  // before the server write actually lands. Wait for the confirmation toast,
-  // then verify with a hard reload (bypassing any client-side state) that
-  // the inbox is genuinely empty server-side before handing back to a test
-  // that's about to create its own capture and assume it's the only one.
+  // app — the toast fires on the client update, not on the server write
+  // landing. A single reload right after the toast can race ahead of that
+  // write (observed: the server round trip can still be in flight ~500ms
+  // after the toast appears) and read back stale, not-yet-discarded state.
+  // Verify with real reloads — retried a few times, since each one reflects
+  // genuine server state at that instant — rather than trusting one shot.
   await expect(page.getByText(/thoughts? discarded/i)).toBeVisible({ timeout: 10_000 });
-  await page.reload();
-  // Wait for the real page (not the loading skeleton) to render before
-  // checking for "Batch organize" — otherwise toBeHidden() can pass
-  // trivially while content is still streaming in, not because it's gone.
-  await page.getByRole("button", { name: /Day actions/ }).waitFor({ timeout: 10_000 });
-  await expect(page.getByRole("button", { name: "Batch organize" })).toBeHidden();
+  const batchOrganizeStillVisible = page.getByRole("button", { name: "Batch organize" });
+  let cleared = false;
+  for (let attempt = 0; attempt < 10 && !cleared; attempt++) {
+    await page.reload();
+    // Wait for the real page (not the loading skeleton) to render before
+    // checking for "Batch organize" — otherwise a check can pass trivially
+    // while content is still streaming in, not because it's gone.
+    await page.getByRole("button", { name: /Day actions/ }).waitFor({ timeout: 10_000 });
+    cleared = !(await batchOrganizeStillVisible.isVisible().catch(() => false));
+  }
+  await expect(batchOrganizeStillVisible).toBeHidden();
 }
