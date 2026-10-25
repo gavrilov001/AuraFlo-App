@@ -29,6 +29,8 @@ export type TaskStatus =
 export type TaskBucket = "today" | "scheduled" | "delegated" | "someday";
 export type DailyPlanStatus = "draft" | "active" | "completed";
 export type DailyWorkflowStep = "capture_review" | "prioritize" | "ready";
+// Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
+export type SenderEmailStatus = "pending" | "verified";
 
 // --- Database --------------------------------------------------------------
 
@@ -44,6 +46,16 @@ export interface Database {
           onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
+          // Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
+          inbound_alias: string;
+          primary_email_verified_email: string | null;
+          primary_email_verified_at: string | null;
+          primary_email_verification_token_hash: string | null;
+          primary_email_verification_expires_at: string | null;
+          primary_email_verification_last_sent_at: string | null;
+          primary_email_verification_send_count_24h: number;
+          sender_email_add_last_at: string | null;
+          sender_email_add_count_1h: number;
         };
         Insert: {
           id: string;
@@ -53,6 +65,15 @@ export interface Database {
           onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
+          inbound_alias?: string;
+          primary_email_verified_email?: string | null;
+          primary_email_verified_at?: string | null;
+          primary_email_verification_token_hash?: string | null;
+          primary_email_verification_expires_at?: string | null;
+          primary_email_verification_last_sent_at?: string | null;
+          primary_email_verification_send_count_24h?: number;
+          sender_email_add_last_at?: string | null;
+          sender_email_add_count_1h?: number;
         };
         Update: {
           id?: string;
@@ -62,6 +83,15 @@ export interface Database {
           onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
+          inbound_alias?: string;
+          primary_email_verified_email?: string | null;
+          primary_email_verified_at?: string | null;
+          primary_email_verification_token_hash?: string | null;
+          primary_email_verification_expires_at?: string | null;
+          primary_email_verification_last_sent_at?: string | null;
+          primary_email_verification_send_count_24h?: number;
+          sender_email_add_last_at?: string | null;
+          sender_email_add_count_1h?: number;
         };
         Relationships: [
           {
@@ -522,6 +552,55 @@ export interface Database {
           },
         ];
       };
+      // Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
+      user_sender_emails: {
+        Row: {
+          id: string;
+          user_id: string;
+          email: string;
+          email_normalized: string;
+          status: SenderEmailStatus;
+          verification_token_hash: string | null;
+          verification_expires_at: string | null;
+          verification_last_sent_at: string | null;
+          verification_send_count_24h: number;
+          verified_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          email: string;
+          status?: SenderEmailStatus;
+          verification_token_hash?: string | null;
+          verification_expires_at?: string | null;
+          verification_last_sent_at?: string | null;
+          verification_send_count_24h?: number;
+          verified_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          email?: string;
+          status?: SenderEmailStatus;
+          verification_token_hash?: string | null;
+          verification_expires_at?: string | null;
+          verification_last_sent_at?: string | null;
+          verification_send_count_24h?: number;
+          verified_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_sender_emails_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -694,6 +773,39 @@ export interface Database {
         Args: { p_workspace_id: string };
         Returns: Json;
       };
+      // Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
+      inbound_alias_regenerate: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      // service_role only — see the migration's comments on
+      // primary_email_request_verification/sender_email_add/sender_email_resend
+      // for why these take an explicit p_user_id instead of auth.uid() and
+      // must never be granted to `authenticated`.
+      primary_email_request_verification: {
+        Args: { p_user_id: string };
+        Returns: Json;
+      };
+      primary_email_verify: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
+      sender_email_add: {
+        Args: { p_user_id: string; p_email: string };
+        Returns: Json;
+      };
+      sender_email_resend: {
+        Args: { p_user_id: string; p_id: string };
+        Returns: Json;
+      };
+      sender_email_remove: {
+        Args: { p_id: string };
+        Returns: Json;
+      };
+      sender_email_verify: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;
@@ -705,6 +817,7 @@ export interface Database {
       task_bucket: TaskBucket;
       daily_plan_status: DailyPlanStatus;
       daily_workflow_step: DailyWorkflowStep;
+      sender_email_status: SenderEmailStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -723,3 +836,16 @@ export type Task = Database["public"]["Tables"]["tasks"]["Row"];
 export type DailyPlan = Database["public"]["Tables"]["daily_plans"]["Row"];
 export type DailyPlanItem =
   Database["public"]["Tables"]["daily_plan_items"]["Row"];
+export type UserSenderEmail =
+  Database["public"]["Tables"]["user_sender_emails"]["Row"];
+/**
+ * The subset of user_sender_emails safe to serialize into a client
+ * component. Excludes verification_token_hash/expires_at/send-count columns
+ * — a sha256 hash can't be reversed into the raw token, but there's no
+ * reason to ship rate-limit/token-lifecycle internals to the browser at
+ * all. Settings' page.tsx selects exactly these columns, never `*`.
+ */
+export type SenderEmailSummary = Pick<
+  UserSenderEmail,
+  "id" | "email" | "status" | "created_at"
+>;

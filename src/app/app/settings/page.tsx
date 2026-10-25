@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 
 import { requireWorkspaceContext } from "@/lib/auth/context";
+import { createClient } from "@/lib/supabase/server";
 import { listTimeZones } from "@/lib/utils/timezones";
+import { buildInboundAddress } from "@/lib/email/inbound-address";
+import type { SenderEmailSummary } from "@/lib/types/database.types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LogoutButton } from "@/components/app-shell/LogoutButton";
 import { ProfileForm } from "./ProfileForm";
 import { WorkspaceForm } from "./WorkspaceForm";
+import { SenderEmailsSection } from "./SenderEmailsSection";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -34,6 +38,21 @@ export default async function SettingsPage() {
   const timezones = listTimeZones();
   const canEditWorkspace = role === "owner" || role === "admin";
 
+  // user_sender_emails / profiles.inbound_alias only exist once
+  // supabase/migrations/20261026120000_email_to_dreamcatcher.sql has been
+  // applied. Until then, degrade to a "coming soon" state instead of
+  // breaking the rest of Settings for existing users.
+  const supabase = await createClient();
+  // Select only what the UI needs — never `*`. verification_token_hash and
+  // the rate-limit timestamps are internal to the RPCs above; there's no
+  // reason to ship them into the client component's serialized props.
+  const sendersRes = await supabase
+    .from("user_sender_emails")
+    .select("id, email, status, created_at")
+    .order("created_at", { ascending: true });
+  const emailToDreamcatcherAvailable = !sendersRes.error && Boolean(profile.inbound_alias);
+  const senderEmails: SenderEmailSummary[] = sendersRes.error ? [] : sendersRes.data ?? [];
+
   return (
     <div className="flex max-w-[800px] flex-col gap-2">
       <PageHeader title="Settings" subtitle={`Signed in as ${user.email}`} />
@@ -48,6 +67,27 @@ export default async function SettingsPage() {
             initialTimezone={profile.timezone}
             timezones={timezones}
           />
+        </Section>
+
+        <Section
+          title="Email to Dream Catcher"
+          description="Send a thought to your Dream Catcher from your account email, or add up to 2 more verified addresses."
+        >
+          {emailToDreamcatcherAvailable ? (
+            <SenderEmailsSection
+              primaryEmail={user.email ?? ""}
+              primaryVerified={
+                profile.primary_email_verified_at != null &&
+                profile.primary_email_verified_email === (user.email ?? "").toLowerCase()
+              }
+              inboundAddress={buildInboundAddress(profile.inbound_alias)}
+              initialSenderEmails={senderEmails}
+            />
+          ) : (
+            <p className="text-sm text-muted">
+              Not set up on this environment yet.
+            </p>
+          )}
         </Section>
 
         <Section

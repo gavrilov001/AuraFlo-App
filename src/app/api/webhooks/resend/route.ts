@@ -2,6 +2,7 @@ import { Webhook, WebhookVerificationError } from "svix";
 
 import { getDreamcatcherSecrets } from "@/lib/secrets/dreamcatcher";
 import { createDreamcatcherAdminClient } from "@/lib/supabase/dreamcatcher-admin";
+import { getInboundDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
 
 // Resend signs webhooks with Svix. Verifying here means the raw body must be
 // read as text (not JSON) before any parsing happens — see
@@ -13,6 +14,8 @@ interface ResendEmailReceivedPayload {
   data: {
     email_id: string;
     from: string;
+    to?: string[] | null;
+    received_for?: string[] | null;
     subject?: string | null;
   };
 }
@@ -20,6 +23,19 @@ interface ResendEmailReceivedPayload {
 interface ReceivedEmail {
   text: string | null;
   html: string | null;
+}
+
+type AdminClient = Awaited<ReturnType<typeof createDreamcatcherAdminClient>>;
+
+// Postgres/PostgREST codes meaning "that table or column doesn't exist" —
+// i.e. supabase/migrations/20261026120000_email_to_dreamcatcher.sql hasn't
+// been applied to this database yet. Treated as "no alias schema available
+// yet", never as a hard failure, so the legacy from-header path keeps
+// working for existing users until the migration is applied.
+const SCHEMA_NOT_READY = new Set(["42P01", "42703", "PGRST202", "PGRST205"]);
+
+function isSchemaNotReady(code: string | undefined | null): boolean {
+  return code != null && SCHEMA_NOT_READY.has(code);
 }
 
 function extractEmailAddress(from: string): string {
@@ -42,10 +58,7 @@ function buildCaptureContent(subject: string | null | undefined, body: string | 
   return trimmedSubject || trimmedBody;
 }
 
-async function findUserIdByEmail(
-  admin: Awaited<ReturnType<typeof createDreamcatcherAdminClient>>,
-  email: string,
-): Promise<string | null> {
+async function findUserIdByEmail(admin: AdminClient, email: string): Promise<string | null> {
   const perPage = 200;
   for (let page = 1; page <= 50; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
@@ -57,10 +70,7 @@ async function findUserIdByEmail(
   return null;
 }
 
-async function resolveWorkspaceId(
-  admin: Awaited<ReturnType<typeof createDreamcatcherAdminClient>>,
-  userId: string,
-): Promise<string | null> {
+async function resolveWorkspaceId(admin: AdminClient, userId: string): Promise<string | null> {
   const { data, error } = await admin
     .from("workspace_members")
     .select("workspace_id")
@@ -81,6 +91,132 @@ async function fetchReceivedEmail(emailId: string, apiKey: string): Promise<Rece
   }
   const body = (await res.json()) as { text?: string | null; html?: string | null };
   return { text: body.text ?? null, html: body.html ?? null };
+}
+
+/**
+ * Extracts the inbound-alias local-part from a recipient address, only when
+ * its domain matches the configured Dream Catcher receiving domain. Returns
+ * null for anything else (a cc'd unrelated address, a malformed entry, etc).
+ */
+function aliasFromRecipient(address: string): string | null {
+  const normalized = extractEmailAddress(address);
+  const at = normalized.lastIndexOf("@");
+  if (at <= 0) return null;
+  const [local, domain] = [normalized.slice(0, at), normalized.slice(at + 1)];
+  if (domain !== getInboundDomain()) return null;
+  return local;
+}
+
+/**
+ * Resolves the single user whose inbound_alias appears among this email's
+ * recipients, from `received_for` (the addresses Resend actually routed to
+ * us) falling back to `to` if that field is absent. Returns null when no
+ * alias matched (caller falls back to the legacy from-header path) or when
+ * more than one distinct user's alias matched — an ambiguous email is never
+ * routed, rather than guessing and risking a cross-account delivery.
+ */
+async function resolveUserByAlias(
+  admin: AdminClient,
+  recipients: string[],
+): Promise<string | null | "ambiguous"> {
+  const aliases = Array.from(
+    new Set(recipients.map(aliasFromRecipient).filter((a): a is string => a !== null)),
+  );
+  if (aliases.length === 0) return null;
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id")
+    .in("inbound_alias", aliases);
+  if (error) {
+    if (isSchemaNotReady(error.code)) return null;
+    throw error;
+  }
+  if (!data || data.length === 0) return null;
+
+  const distinctUserIds = Array.from(new Set(data.map((row) => row.id)));
+  if (distinctUserIds.length > 1) return "ambiguous";
+  return distinctUserIds[0];
+}
+
+/** True if any recipient exactly matches a recognized legacy address. */
+function recipientsIncludeLegacyAddress(recipients: string[]): boolean {
+  const legacy = new Set(getLegacyInboundAddresses());
+  return recipients.some((r) => legacy.has(extractEmailAddress(r)));
+}
+
+/**
+ * True only if `senderEmail` is a *verified* approved sender for `userId` —
+ * either their primary account email (verified via
+ * primary_email_request_verification/verify, since Supabase email
+ * confirmation is disabled for this project and auth.users.email alone is
+ * not proof of ownership) or a verified row in user_sender_emails. Resend's
+ * webhook/API does not expose SPF/DKIM/DMARC verdicts, so this check is the
+ * entire trust boundary for the alias-routed path — the From header itself
+ * is still just a claim, which is why it must match a verified record.
+ */
+async function isApprovedSender(
+  admin: AdminClient,
+  userId: string,
+  senderEmail: string,
+): Promise<boolean> {
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("primary_email_verified_email, primary_email_verified_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) {
+    if (isSchemaNotReady(profileError.code)) return false;
+    throw profileError;
+  }
+  if (profile?.primary_email_verified_at && profile.primary_email_verified_email === senderEmail) {
+    // primary_email_verified_email is a point-in-time snapshot. If the
+    // user's Supabase Auth email has since changed, that snapshot is stale
+    // and must not keep approving an address they may no longer control —
+    // supabase/migrations/20261026120000_email_to_dreamcatcher.sql's
+    // auth.users trigger clears this on change, but this re-check is
+    // defense in depth for any row written before that trigger existed.
+    const { data: authUser, error: authError } = await admin.auth.admin.getUserById(userId);
+    if (authError) throw authError;
+    const currentPrimaryEmail = authUser.user?.email?.toLowerCase() ?? null;
+    if (currentPrimaryEmail === profile.primary_email_verified_email) {
+      return true;
+    }
+  }
+
+  const { data: sender, error: senderError } = await admin
+    .from("user_sender_emails")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("email_normalized", senderEmail)
+    .eq("status", "verified")
+    .maybeSingle();
+  if (senderError) {
+    if (isSchemaNotReady(senderError.code)) return false;
+    throw senderError;
+  }
+  return sender != null;
+}
+
+async function insertCapture(
+  admin: AdminClient,
+  params: { workspaceId: string; userId: string; content: string; emailId: string },
+): Promise<"inserted" | "duplicate"> {
+  const { error } = await admin.from("captures").insert({
+    workspace_id: params.workspaceId,
+    created_by: params.userId,
+    content: params.content,
+    source: "email",
+    source_external_id: params.emailId,
+    status: "inbox",
+  });
+  if (error) {
+    // Unique violation on (workspace_id, source, source_external_id) means
+    // this email was already captured by a prior delivery of this webhook.
+    if (error.code === "23505") return "duplicate";
+    throw error;
+  }
+  return "inserted";
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -128,9 +264,62 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const senderEmail = extractEmailAddress(from);
+  const recipients = [
+    ...(Array.isArray(payload.data.received_for) ? payload.data.received_for : []),
+    ...(Array.isArray(payload.data.to) ? payload.data.to : []),
+  ];
 
   try {
     const admin = await createDreamcatcherAdminClient();
+
+    // --- New path: the email was sent to a personal Dream Catcher alias.
+    // Routing is by recipient (an unguessable capability), not by the
+    // spoofable From header — but the sender must still be a *verified*
+    // approved address for that specific user, or the email is ignored.
+    const aliasResolution = await resolveUserByAlias(admin, recipients);
+    if (aliasResolution === "ambiguous") {
+      console.warn("resend webhook: email addressed to more than one user's alias, ignoring");
+      return new Response(null, { status: 200 });
+    }
+    if (aliasResolution !== null) {
+      const userId = aliasResolution;
+      const approved = await isApprovedSender(admin, userId, senderEmail);
+      if (!approved) {
+        console.warn("resend webhook: sender is not a verified approved address for this alias");
+        return new Response(null, { status: 200 });
+      }
+
+      const workspaceId = await resolveWorkspaceId(admin, userId);
+      if (!workspaceId) {
+        console.warn("resend webhook: no workspace found for resolved user");
+        return new Response(null, { status: 200 });
+      }
+
+      const { text, html } = await fetchReceivedEmail(emailId, secrets.resendApiKey);
+      const body = text ?? (html ? htmlToPlainText(html) : null);
+      const content = buildCaptureContent(subject, body);
+      if (!content) {
+        console.warn("resend webhook: email had no usable subject or body, skipping");
+        return new Response(null, { status: 200 });
+      }
+
+      await insertCapture(admin, { workspaceId, userId, content, emailId });
+      return new Response(null, { status: 200 });
+    }
+
+    // --- Legacy path: allowed ONLY when a recipient is an exact match for
+    // one of the explicitly recognized legacy addresses
+    // (getLegacyInboundAddresses()) — never merely because no personal
+    // alias matched. An unknown, malformed, or revoked personal-alias-shaped
+    // address must be dropped here, not silently fall through to spoofable
+    // sender-only routing. This is the one path that still trusts the From
+    // header alone — preserved so the already-working legacy integration
+    // isn't broken by this rollout; see the architecture report for that
+    // tradeoff.
+    if (!recipientsIncludeLegacyAddress(recipients)) {
+      console.warn("resend webhook: recipient matched no known alias or legacy address, ignoring");
+      return new Response(null, { status: 200 });
+    }
 
     const userId = await findUserIdByEmail(admin, senderEmail);
     if (!userId) {
@@ -152,24 +341,7 @@ export async function POST(request: Request): Promise<Response> {
       return new Response(null, { status: 200 });
     }
 
-    const { error } = await admin.from("captures").insert({
-      workspace_id: workspaceId,
-      created_by: userId,
-      content,
-      source: "email",
-      source_external_id: emailId,
-      status: "inbox",
-    });
-
-    if (error) {
-      // Unique violation on (workspace_id, source, source_external_id) means
-      // this email was already captured by a prior delivery of this webhook.
-      if (error.code === "23505") {
-        return new Response(null, { status: 200 });
-      }
-      throw error;
-    }
-
+    await insertCapture(admin, { workspaceId, userId, content, emailId });
     return new Response(null, { status: 200 });
   } catch (error) {
     console.error("resend webhook: failed to process email.received", error);
