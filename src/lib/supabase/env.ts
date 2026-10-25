@@ -20,10 +20,17 @@ export const SUPABASE_PUBLISHABLE_KEY = readEnv(
 );
 
 /**
- * Base URL used to build absolute links in outgoing emails (password reset,
- * Email to Dream Catcher verification) — there's no incoming request to
- * derive an origin from at send time, unlike /auth/callback/route.ts which
- * uses request.nextUrl.origin instead.
+ * The one trusted source for this app's own public origin — used to build
+ * absolute links in outgoing emails (password reset, Email to Dream
+ * Catcher verification) and every authentication redirect
+ * (/auth/callback/route.ts, src/lib/supabase/middleware.ts). None of those
+ * call sites use request.nextUrl.origin or any Host/X-Forwarded-Host
+ * header: on AWS Amplify, request.nextUrl.origin was confirmed to reflect
+ * the app's internal origin rather than the public
+ * https://app.auraflo.com the browser actually requested — sending real
+ * recovery-link clicks to an unreachable localhost URL — and a raw
+ * forwarded-host header is attacker-controllable in general regardless of
+ * platform, so it must never be trusted for an auth redirect either way.
  *
  * NEXT_PUBLIC_* variables are inlined into the build output wherever
  * they're referenced — client or server code — at `next build` time, not

@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/types/database.types";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./env";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSiteUrl } from "./env";
 
 const PROTECTED_PREFIX = "/app";
 const AUTH_ROUTES = ["/login", "/signup"];
@@ -58,10 +58,12 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Built from our own trusted site-url config, not request.nextUrl's own
+  // origin — same reasoning as /auth/callback/route.ts and getSiteUrl()'s
+  // own comment: an incoming request's perceived origin/Host is not
+  // something an auth redirect should ever trust, platform quirks aside.
   if (!user && pathname.startsWith(PROTECTED_PREFIX)) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.search = "";
+    const redirectUrl = new URL("/login", getSiteUrl());
     const requestedPath = pathname + request.nextUrl.search;
     if (requestedPath && requestedPath !== "/app") {
       redirectUrl.searchParams.set("redirectTo", requestedPath);
@@ -70,10 +72,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && AUTH_ROUTES.includes(pathname)) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/app";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return NextResponse.redirect(new URL("/app", getSiteUrl()));
   }
 
   return supabaseResponse;

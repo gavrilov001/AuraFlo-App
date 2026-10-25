@@ -47,6 +47,42 @@ test.describe("Forgot / reset password", () => {
     ).toBeVisible();
   });
 
+  test("auth callback redirects use our trusted site URL, never a spoofed Host header (regression)", async ({
+    request,
+  }) => {
+    // Confirmed root cause of a real production bug: the callback route
+    // used to build its redirect from request.nextUrl.origin, which on AWS
+    // Amplify reflected the app's own internal origin rather than the
+    // public domain the browser actually requested — sending real
+    // recovery-link clicks to an unreachable localhost URL. Fixed to build
+    // every redirect from getSiteUrl() (our own trusted config) instead of
+    // anything request-derived. This sends a forged Host/X-Forwarded-Host
+    // — exactly what a misbehaving proxy (or an attacker) could present —
+    // and asserts the redirect never reflects it back, regardless of
+    // whether the platform happens to behave itself on any given request.
+    const res = await request.get(
+      "/auth/callback?code=not-a-real-code&next=/update-password",
+      {
+        headers: {
+          Host: "evil.example.invalid",
+          "X-Forwarded-Host": "evil.example.invalid",
+          "X-Forwarded-Proto": "https",
+        },
+        maxRedirects: 0,
+      },
+    );
+
+    expect([301, 302, 303, 307, 308]).toContain(res.status());
+    const location = res.headers()["location"];
+    expect(location).toBeTruthy();
+    expect(location).not.toContain("evil.example.invalid");
+    // Our own test baseURL (PLAYWRIGHT_BASE_URL, default http://127.0.0.1:3000
+    // per playwright.config.ts) is what NEXT_PUBLIC_SITE_URL resolves to for
+    // this run — the redirect must be absolute against that, not the
+    // spoofed host above.
+    expect(location).toMatch(/^https?:\/\/(127\.0\.0\.1|localhost):3000\//);
+  });
+
   test("visiting /update-password with no session shows the expired state, not the form", async ({ page }) => {
     await page.goto("/update-password");
     await expect(
