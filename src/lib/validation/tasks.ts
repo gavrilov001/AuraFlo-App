@@ -1,5 +1,25 @@
 import { z } from "zod";
 
+import {
+  DESTINATIONS,
+  TASK_SORTS,
+  TASK_VIEWS,
+  destinationToBucket,
+  type Destination,
+  type TaskSort,
+  type TaskView,
+} from "./task-constants";
+
+export {
+  DESTINATIONS,
+  TASK_SORTS,
+  TASK_VIEWS,
+  destinationToBucket,
+  type Destination,
+  type TaskSort,
+  type TaskView,
+};
+
 const uuid = z.uuid({ message: "Invalid identifier." });
 const dateOnly = z
   .string()
@@ -38,27 +58,6 @@ const delegateEmail = z
   .nullish()
   .or(z.literal("").transform(() => null));
 const priority = z.coerce.number().int().min(1).max(4).optional();
-
-export const TASK_VIEWS = [
-  "open",
-  "today",
-  "scheduled",
-  "delegated",
-  "later",
-  "completed",
-] as const;
-export type TaskView = (typeof TASK_VIEWS)[number];
-
-export const TASK_SORTS = ["manual", "due", "newest", "oldest"] as const;
-export type TaskSort = (typeof TASK_SORTS)[number];
-
-/** UI destination → db bucket. "later" is shown; "someday" is stored. */
-export const DESTINATIONS = ["today", "scheduled", "delegated", "later"] as const;
-export type Destination = (typeof DESTINATIONS)[number];
-
-export function destinationToBucket(d: Destination): string {
-  return d === "later" ? "someday" : d;
-}
 
 export const listTasksSchema = z.object({
   view: z.enum(TASK_VIEWS).default("open"),

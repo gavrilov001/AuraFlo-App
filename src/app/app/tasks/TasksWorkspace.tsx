@@ -38,12 +38,8 @@ import { cn } from "@/lib/utils/cn";
 import type { CategoryOption } from "@/lib/data/categories";
 import type { FocusOption } from "@/lib/data/start-day";
 import type { TaskRow as TaskRowData, TaskListResult } from "@/lib/data/tasks";
-import {
-  TASK_VIEWS,
-  type Destination,
-  type ListTasksInput,
-  type TaskView,
-} from "@/lib/validation/tasks";
+import { TASK_VIEWS, type TaskView } from "@/lib/validation/task-constants";
+import type { Destination, ListTasksInput } from "@/lib/validation/tasks";
 import { TaskRow, type RowCallbacks } from "./TaskRow";
 import { TaskPanel, type Mode } from "./TaskPanel";
 import {
