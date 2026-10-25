@@ -105,17 +105,33 @@ export async function resetPlanningDay(page: Page): Promise<void> {
     const resetButton = dialog.getByRole("button", { name: "Reset today" });
     await expect(resetButton).toBeEnabled({ timeout: 10_000 });
     await resetButton.click();
+    // The confirm dialog can still be mid-close (e.g. an exit transition)
+    // after the URL/content underneath has already moved on — leaving its
+    // overlay in the DOM long enough to intercept the very next click this
+    // helper makes (the "Batch organize" toggle below). Wait for it to
+    // actually detach before treating the reset as finished.
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
     await expect(page).toHaveURL(/\/app\/start/, { timeout: 15_000 });
     // Same skeleton race as the initial navigation — wait for real content.
     await page.getByRole("button", { name: /Day actions/ }).waitFor({ timeout: 10_000 });
   }
 
+  // A bare `isVisible()` right after navigation/reload races the same
+  // Suspense-boundary gap the comments above call out for "Day actions" —
+  // "Batch organize" not being visible *yet* looks identical to the inbox
+  // genuinely being empty, and the two have very different consequences: the
+  // latter is a no-op, the former silently skips discarding an inbox that
+  // still has captures in it, leaking them into whichever test runs next.
+  // Wait for the review area to resolve into one of its two terminal states
+  // (something to review, or none) instead of sampling it at a single instant.
   const batchButton = page.getByRole("button", { name: "Batch organize" });
+  const inboxClear = page.getByRole("heading", { name: "Nothing waiting in your inbox." });
+  await expect(batchButton.or(inboxClear)).toBeVisible({ timeout: 10_000 });
   if (!(await batchButton.isVisible().catch(() => false))) return; // inbox already clear
 
   await batchButton.click();
   const selectAllButton = page.getByRole("button", { name: /Select all/ });
-  if (!(await selectAllButton.isVisible().catch(() => false))) return;
+  await selectAllButton.waitFor({ timeout: 10_000 });
   await selectAllButton.click();
   const discardButton = page.getByRole("button", { name: /Discard/ });
   await discardButton.click();

@@ -35,16 +35,20 @@ test.describe("Today", () => {
     await row.getByRole("button", { name: /Complete|Mark complete/ }).click();
     await expect(page.getByText(/completed/i).first()).toBeVisible();
     await page.getByRole("button", { name: /Completed today/ }).click();
-    await row.getByRole("button", { name: /Reopen/ }).click();
+    await row.getByRole("button", { name: /Reopen/i }).click();
     await expect(page.getByText(title, { exact: true })).toBeVisible();
   });
 
   test("quick capture and adjust plan are available", async ({ page }) => {
     const title = uniqueTitle("E2E quick capture");
     await prepareToday(page, uniqueTitle("E2E plan"));
-    const quick = page.getByRole("region", { name: "Quick capture" });
-    await quick.getByLabel("Capture a thought").fill(title);
-    await quick.getByRole("button", { name: "Capture" }).click();
+    // Unlike Dream Catcher's composer, Today's "Quick capture" starts
+    // collapsed as a plain button and has no region/aria-label wrapper
+    // around the form it reveals — open it first, then target the field
+    // directly.
+    await page.getByRole("button", { name: "Quick capture" }).click();
+    await page.getByLabel("Capture a thought").fill(title);
+    await page.getByRole("button", { name: "Capture" }).click();
     await expect(page.getByText("Captured to your Dream Catcher.")).toBeVisible();
     await page.getByRole("link", { name: "Adjust plan" }).click();
     await expect(page).toHaveURL(/\/app\/start\?mode=adjust/);
