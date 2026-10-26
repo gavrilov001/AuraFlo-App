@@ -3,8 +3,6 @@ import { Webhook, WebhookVerificationError } from "svix";
 import { getDreamcatcherSecrets } from "@/lib/secrets/dreamcatcher";
 import { createDreamcatcherAdminClient } from "@/lib/supabase/dreamcatcher-admin";
 import { getDreamDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
-import { sendTransactionalEmail } from "@/lib/email/resend";
-import { buildDreamCaptureConfirmEmail } from "@/lib/email/verification-templates";
 
 // Resend signs webhooks with Svix. Verifying here means the raw body must be
 // read as text (not JSON) before any parsing happens — see
@@ -30,12 +28,13 @@ interface ReceivedEmail {
 type AdminClient = Awaited<ReturnType<typeof createDreamcatcherAdminClient>>;
 
 // Postgres/PostgREST codes meaning "that table, column, or function doesn't
-// exist" — i.e. 20261026120000_email_to_dreamcatcher.sql and/or
-// 20261101000000_dream_catcher_handles.sql haven't been applied to this
-// database yet. Treated as "no handle schema available yet", never as a hard
-// failure, so the legacy from-header path keeps working for existing users
-// until the migration is applied, and deploy order between this app code
-// and either migration is never load-bearing.
+// exist" — i.e. one or more of 20261026120000_email_to_dreamcatcher.sql,
+// 20261101000000_dream_catcher_handles.sql, or
+// 20261103000000_dream_capture_direct_insert.sql haven't been applied to
+// this database yet. Treated as "no handle schema available yet", never as
+// a hard failure, so the legacy from-header path keeps working for
+// existing users until the migration is applied, and deploy order between
+// this app code and any of those migrations is never load-bearing.
 const SCHEMA_NOT_READY = new Set(["42P01", "42703", "PGRST202", "PGRST205"]);
 
 function isSchemaNotReady(code: string | undefined | null): boolean {
@@ -280,13 +279,14 @@ export async function POST(request: Request): Promise<Response> {
     // --- New path: the email was sent to a personal, readable Dream
     // Catcher handle. Routing is by recipient, not by the spoofable From
     // header — but the sender must still be a *verified* approved address
-    // for that specific user, or the email is ignored. The handle is
-    // guessable, so sender-match alone isn't enough on its own (see
-    // 20261101000000_dream_catcher_handles.sql) — dream_capture_submit()
-    // only captures immediately for an already-confirmed sender; otherwise
-    // it holds the content and mints a confirmation token for us to email
-    // to the user's verified primary address, since an attacker spoofing
-    // the sender can't read that inbox.
+    // for that specific user, or the email is ignored and never captured.
+    // Captures immediately, with no confirmation step: the handle is
+    // guessable and Resend exposes no per-message authentication signal
+    // (see 20261103000000_dream_capture_direct_insert.sql's REMAINING RISK
+    // note), so a correctly-guessed handle + a correctly-guessed verified
+    // sender address can land a forged capture — an accepted, documented
+    // tradeoff for frictionless capture, not a claim that this route is
+    // spoof-proof.
     const handleResolution = await resolveUserByDreamHandle(admin, recipients);
     if (handleResolution === "ambiguous") {
       console.warn("resend webhook: email addressed to more than one user's handle, ignoring");
@@ -308,70 +308,37 @@ export async function POST(request: Request): Promise<Response> {
         return new Response(null, { status: 200 });
       }
 
-      const submit = await admin.rpc("dream_capture_submit", {
+      const insert = await admin.rpc("dream_capture_insert", {
         p_user_id: userId,
         p_sender_email: senderEmail,
         p_source_external_id: emailId,
         p_content: content,
       });
-      if (submit.error) {
-        if (isSchemaNotReady(submit.error.code)) {
-          console.warn("resend webhook: dream_capture_submit not available yet, dropping");
+      if (insert.error) {
+        if (isSchemaNotReady(insert.error.code)) {
+          console.warn("resend webhook: dream_capture_insert not available yet, dropping");
           return new Response(null, { status: 200 });
         }
-        throw submit.error;
+        throw insert.error;
       }
 
-      // dream_capture_submit() returns a status rather than raising for
-      // every expected outcome (see 20261101000000_dream_catcher_handles.sql
-      // for why — a raised exception would roll back its own internal
-      // cleanup delete). "captured", "duplicate_pending", "no_workspace",
-      // "not_approved", "no_verified_destination", and "rate_limited" all
-      // need no further action here — only "pending" does.
-      const submitData = submit.data as { status?: string; token?: string; confirm_to?: string } | null;
-      const status = submitData?.status;
+      // dream_capture_insert() returns a status rather than raising for
+      // every expected outcome — "captured" (new or a deduped retry) needs
+      // no further action; the rest are drops, logged for visibility.
+      const status = (insert.data as { status?: string } | null)?.status;
       switch (status) {
         case "no_workspace":
           console.warn("resend webhook: no workspace found for resolved user");
           break;
         case "not_approved":
-          // Defense-in-depth branch inside dream_capture_submit itself —
+          // Defense-in-depth branch inside dream_capture_insert itself —
           // shouldn't normally trigger, since isApprovedSender() above
           // already gated this. Worth knowing about if it ever does.
-          console.warn("resend webhook: dream_capture_submit rejected a sender isApprovedSender had approved");
-          break;
-        case "no_verified_destination":
-          console.warn("resend webhook: user has no verified primary email to confirm to, dropping");
+          console.warn("resend webhook: dream_capture_insert rejected a sender isApprovedSender had approved");
           break;
         case "rate_limited":
-          console.warn("resend webhook: dream-handle handshake rate limit hit, dropping");
+          console.warn("resend webhook: dream-handle capture rate limit hit, dropping");
           break;
-        case "pending": {
-          // Sent only to the proven-owned primary_email_verified_email the
-          // RPC itself resolved — never the live auth.users.email (see the
-          // migration for why that distinction matters).
-          const token = submitData?.token;
-          const confirmTo = submitData?.confirm_to;
-          if (token && confirmTo) {
-            const { subject: confirmSubject, html: confirmHtml, text: confirmText } =
-              buildDreamCaptureConfirmEmail(senderEmail, token);
-            try {
-              await sendTransactionalEmail({
-                to: confirmTo,
-                subject: confirmSubject,
-                html: confirmHtml,
-                text: confirmText,
-              });
-            } catch (sendError) {
-              // The pending row already exists — this is a lost
-              // notification, not a lost capture. Nothing to retry here:
-              // the sender's next email (if any) will hit the same pending
-              // row via the unique index and won't send a duplicate either.
-              console.error("resend webhook: failed to send dream-capture confirmation email", sendError);
-            }
-          }
-          break;
-        }
         default:
           break;
       }

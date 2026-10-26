@@ -57,8 +57,11 @@ export interface Database {
           sender_email_add_count_1h: number;
           // Added by supabase/migrations/20261101000000_dream_catcher_handles.sql
           dream_handle: string;
-          dream_capture_pending_last_at: string | null;
-          dream_capture_pending_count_1h: number;
+          // Added by supabase/migrations/20261103000000_dream_capture_direct_insert.sql
+          // (replaces that migration's dream_capture_pending_last_at/_count_1h,
+          // dropped there)
+          dream_capture_received_last_at: string | null;
+          dream_capture_received_count_1h: number;
         };
         Insert: {
           id: string;
@@ -77,8 +80,8 @@ export interface Database {
           sender_email_add_last_at?: string | null;
           sender_email_add_count_1h?: number;
           dream_handle?: string;
-          dream_capture_pending_last_at?: string | null;
-          dream_capture_pending_count_1h?: number;
+          dream_capture_received_last_at?: string | null;
+          dream_capture_received_count_1h?: number;
         };
         Update: {
           id?: string;
@@ -97,8 +100,8 @@ export interface Database {
           sender_email_add_last_at?: string | null;
           sender_email_add_count_1h?: number;
           dream_handle?: string;
-          dream_capture_pending_last_at?: string | null;
-          dream_capture_pending_count_1h?: number;
+          dream_capture_received_last_at?: string | null;
+          dream_capture_received_count_1h?: number;
         };
         Relationships: [
           {
@@ -809,20 +812,18 @@ export interface Database {
         Args: { p_token: string };
         Returns: Json;
       };
-      // Added by supabase/migrations/20261101000000_dream_catcher_handles.sql
-      // service_role only — called from the webhook's admin client, same
-      // trust boundary as sender_email_add/sender_email_resend above.
-      dream_capture_submit: {
+      // Added by supabase/migrations/20261103000000_dream_capture_direct_insert.sql
+      // (replaces that migration's dream_capture_submit/dream_capture_confirm,
+      // dropped there) — service_role only, called from the webhook's admin
+      // client, same trust boundary as sender_email_add/sender_email_resend
+      // above.
+      dream_capture_insert: {
         Args: {
           p_user_id: string;
           p_sender_email: string;
           p_source_external_id: string | null;
           p_content: string;
         };
-        Returns: Json;
-      };
-      dream_capture_confirm: {
-        Args: { p_token: string };
         Returns: Json;
       };
     };
