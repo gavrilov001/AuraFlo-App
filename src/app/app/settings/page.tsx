@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { requireWorkspaceContext } from "@/lib/auth/context";
 import { createClient } from "@/lib/supabase/server";
 import { listTimeZones } from "@/lib/utils/timezones";
-import { buildInboundAddress } from "@/lib/email/inbound-address";
+import { buildInboundAddress, buildDreamAddress } from "@/lib/email/inbound-address";
 import type { SenderEmailSummary } from "@/lib/types/database.types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LogoutButton } from "@/components/app-shell/LogoutButton";
@@ -52,6 +52,10 @@ export default async function SettingsPage() {
     .order("created_at", { ascending: true });
   const emailToDreamcatcherAvailable = !sendersRes.error && Boolean(profile.inbound_alias);
   const senderEmails: SenderEmailSummary[] = sendersRes.error ? [] : sendersRes.data ?? [];
+  // dream_handle (20261101000000_dream_catcher_handles.sql) is a separate,
+  // later migration from the rest of Email to Dream Catcher — degrade this
+  // one block independently rather than gating it on emailToDreamcatcherAvailable.
+  const dreamAddress = profile.dream_handle ? buildDreamAddress(profile.dream_handle) : null;
 
   return (
     <div className="flex max-w-[800px] flex-col gap-2">
@@ -81,6 +85,7 @@ export default async function SettingsPage() {
                 profile.primary_email_verified_email === (user.email ?? "").toLowerCase()
               }
               inboundAddress={buildInboundAddress(profile.inbound_alias)}
+              dreamAddress={dreamAddress}
               initialSenderEmails={senderEmails}
             />
           ) : (

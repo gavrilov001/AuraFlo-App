@@ -56,6 +56,10 @@ export interface Database {
           primary_email_verification_send_count_24h: number;
           sender_email_add_last_at: string | null;
           sender_email_add_count_1h: number;
+          // Added by supabase/migrations/20261101000000_dream_catcher_handles.sql
+          dream_handle: string;
+          dream_capture_pending_last_at: string | null;
+          dream_capture_pending_count_1h: number;
         };
         Insert: {
           id: string;
@@ -74,6 +78,9 @@ export interface Database {
           primary_email_verification_send_count_24h?: number;
           sender_email_add_last_at?: string | null;
           sender_email_add_count_1h?: number;
+          dream_handle?: string;
+          dream_capture_pending_last_at?: string | null;
+          dream_capture_pending_count_1h?: number;
         };
         Update: {
           id?: string;
@@ -92,6 +99,9 @@ export interface Database {
           primary_email_verification_send_count_24h?: number;
           sender_email_add_last_at?: string | null;
           sender_email_add_count_1h?: number;
+          dream_handle?: string;
+          dream_capture_pending_last_at?: string | null;
+          dream_capture_pending_count_1h?: number;
         };
         Relationships: [
           {
@@ -803,6 +813,22 @@ export interface Database {
         Returns: Json;
       };
       sender_email_verify: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
+      // Added by supabase/migrations/20261101000000_dream_catcher_handles.sql
+      // service_role only — called from the webhook's admin client, same
+      // trust boundary as sender_email_add/sender_email_resend above.
+      dream_capture_submit: {
+        Args: {
+          p_user_id: string;
+          p_sender_email: string;
+          p_source_external_id: string | null;
+          p_content: string;
+        };
+        Returns: Json;
+      };
+      dream_capture_confirm: {
         Args: { p_token: string };
         Returns: Json;
       };

@@ -32,11 +32,13 @@ export function SenderEmailsSection({
   primaryEmail,
   primaryVerified,
   inboundAddress,
+  dreamAddress,
   initialSenderEmails,
 }: {
   primaryEmail: string;
   primaryVerified: boolean;
   inboundAddress: string;
+  dreamAddress: string | null;
   initialSenderEmails: SenderEmailSummary[];
 }) {
   const toast = useToast();
@@ -61,6 +63,14 @@ export function SenderEmailsSection({
   function copyAddress() {
     void navigator.clipboard
       .writeText(address)
+      .then(() => toast.success("Address copied."))
+      .catch(() => toast.error("Couldn't copy to clipboard."));
+  }
+
+  function copyDreamAddress() {
+    if (!dreamAddress) return;
+    void navigator.clipboard
+      .writeText(dreamAddress)
       .then(() => toast.success("Address copied."))
       .catch(() => toast.error("Couldn't copy to clipboard."));
   }
@@ -168,8 +178,29 @@ export function SenderEmailsSection({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1.5">
-        <p className="text-sm font-medium text-ink">Your Dream Catcher address</p>
+      {dreamAddress && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-medium text-ink">Your Dream Catcher address</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="rounded-md border border-line bg-surface-soft px-2.5 py-1.5 text-[13px] text-body">
+              {dreamAddress}
+            </code>
+            <Button variant="secondary" size="sm" onClick={copyDreamAddress}>
+              <Copy aria-hidden className="size-3.5" />
+              Copy
+            </Button>
+          </div>
+          <p className="text-[13px] text-muted">
+            Thoughts sent from your verified emails below to this address land in Dream
+            Catcher. This address is assigned to you and can&apos;t be changed.
+          </p>
+        </div>
+      )}
+
+      <div className={`flex flex-col gap-1.5 ${dreamAddress ? "border-t border-line-soft pt-5" : ""}`}>
+        <p className="text-sm font-medium text-ink">
+          {dreamAddress ? "Legacy Dream Catcher address" : "Your Dream Catcher address"}
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <code className="rounded-md border border-line bg-surface-soft px-2.5 py-1.5 text-[13px] text-body">
             {address}

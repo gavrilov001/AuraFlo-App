@@ -99,7 +99,9 @@ test.describe("Settings — Email to Dream Catcher", () => {
     await expect(page.getByText("Primary")).toBeVisible();
     // A brand-new account's primary email has never been verified.
     await expect(section.getByText("Pending").first()).toBeVisible();
-    await expect(page.locator("code")).toContainText("@");
+    // .first(): once 20261101000000_dream_catcher_handles.sql is applied,
+    // a second <code> (the readable dream_handle address) also renders.
+    await expect(page.locator("code").first()).toContainText("@");
   });
 
   test("adding an address shows it as Pending and sends a verification email", async ({ page }) => {
@@ -213,12 +215,18 @@ test.describe("Settings — Email to Dream Catcher", () => {
       "Requires supabase/migrations/20261026120000_email_to_dreamcatcher.sql applied.",
     );
 
-    const before = await page.locator("code").first().textContent();
-    await page.getByRole("button", { name: /Regenerate/ }).click();
+    // Scoped to the Regenerate button's own row rather than "the first
+    // <code> on the page" — once 20261101000000_dream_catcher_handles.sql is
+    // applied, a second <code> (the readable, non-regenerable dream_handle
+    // address) renders above this one.
+    const regenerateButton = page.getByRole("button", { name: /Regenerate/ });
+    const addressRow = regenerateButton.locator("..");
+    const before = await addressRow.locator("code").textContent();
+    await regenerateButton.click();
     await page.getByRole("dialog").getByRole("button", { name: "Regenerate" }).click();
 
     await expect(page.getByText(/no longer works/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("code").first()).not.toHaveText(before ?? "");
+    await expect(addressRow.locator("code")).not.toHaveText(before ?? "");
   });
 
   test("a direct RPC call cannot retrieve a verification token (trust-boundary security regression)", async ({

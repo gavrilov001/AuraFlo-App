@@ -2,7 +2,9 @@ import { Webhook, WebhookVerificationError } from "svix";
 
 import { getDreamcatcherSecrets } from "@/lib/secrets/dreamcatcher";
 import { createDreamcatcherAdminClient } from "@/lib/supabase/dreamcatcher-admin";
-import { getInboundDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
+import { getInboundDomain, getDreamDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
+import { sendTransactionalEmail } from "@/lib/email/resend";
+import { buildDreamCaptureConfirmEmail } from "@/lib/email/verification-templates";
 
 // Resend signs webhooks with Svix. Verifying here means the raw body must be
 // read as text (not JSON) before any parsing happens — see
@@ -27,11 +29,13 @@ interface ReceivedEmail {
 
 type AdminClient = Awaited<ReturnType<typeof createDreamcatcherAdminClient>>;
 
-// Postgres/PostgREST codes meaning "that table or column doesn't exist" —
-// i.e. supabase/migrations/20261026120000_email_to_dreamcatcher.sql hasn't
-// been applied to this database yet. Treated as "no alias schema available
-// yet", never as a hard failure, so the legacy from-header path keeps
-// working for existing users until the migration is applied.
+// Postgres/PostgREST codes meaning "that table, column, or function doesn't
+// exist" — i.e. 20261026120000_email_to_dreamcatcher.sql and/or
+// 20261101000000_dream_catcher_handles.sql haven't been applied to this
+// database yet. Treated as "no alias schema available yet", never as a hard
+// failure, so the legacy from-header path keeps working for existing users
+// until the migration is applied, and deploy order between this app code
+// and either migration is never load-bearing.
 const SCHEMA_NOT_READY = new Set(["42P01", "42703", "PGRST202", "PGRST205"]);
 
 function isSchemaNotReady(code: string | undefined | null): boolean {
@@ -94,49 +98,77 @@ async function fetchReceivedEmail(emailId: string, apiKey: string): Promise<Rece
 }
 
 /**
- * Extracts the inbound-alias local-part from a recipient address, only when
- * its domain matches the configured Dream Catcher receiving domain. Returns
- * null for anything else (a cc'd unrelated address, a malformed entry, etc).
+ * Extracts a recipient's local-part, only when its domain matches `domain`.
+ * Returns null for anything else (a cc'd unrelated address, a malformed
+ * entry, the other Dream Catcher domain, etc).
  */
-function aliasFromRecipient(address: string): string | null {
+function localPartForDomain(address: string, domain: string): string | null {
   const normalized = extractEmailAddress(address);
   const at = normalized.lastIndexOf("@");
   if (at <= 0) return null;
-  const [local, domain] = [normalized.slice(0, at), normalized.slice(at + 1)];
-  if (domain !== getInboundDomain()) return null;
+  const [local, recipientDomain] = [normalized.slice(0, at), normalized.slice(at + 1)];
+  if (recipientDomain !== domain) return null;
   return local;
 }
 
+type AliasMatch = { userId: string; route: "alias" | "dream" };
+
 /**
- * Resolves the single user whose inbound_alias appears among this email's
- * recipients, from `received_for` (the addresses Resend actually routed to
- * us) falling back to `to` if that field is absent. Returns null when no
- * alias matched (caller falls back to the legacy from-header path) or when
- * more than one distinct user's alias matched — an ambiguous email is never
- * routed, rather than guessing and risking a cross-account delivery.
+ * Resolves the single user addressed by this email's recipients, from
+ * `received_for` (the addresses Resend actually routed to us) falling back
+ * to `to` if that field is absent. Checks both the unguessable random-hex
+ * `inbound_alias` (route "alias") and the readable, guessable `dream_handle`
+ * (route "dream") — the two are deliberately on different domains so a
+ * recipient can only ever match one of them. Returns null when neither
+ * matched (caller falls back to the legacy from-header path) or when more
+ * than one distinct user matched — an ambiguous email is never routed,
+ * rather than guessing and risking a cross-account delivery.
  */
 async function resolveUserByAlias(
   admin: AdminClient,
   recipients: string[],
-): Promise<string | null | "ambiguous"> {
+): Promise<AliasMatch | null | "ambiguous"> {
   const aliases = Array.from(
-    new Set(recipients.map(aliasFromRecipient).filter((a): a is string => a !== null)),
+    new Set(
+      recipients
+        .map((r) => localPartForDomain(r, getInboundDomain()))
+        .filter((a): a is string => a !== null),
+    ),
   );
-  if (aliases.length === 0) return null;
+  const handles = Array.from(
+    new Set(
+      recipients
+        .map((r) => localPartForDomain(r, getDreamDomain()))
+        .filter((a): a is string => a !== null),
+    ),
+  );
+  if (aliases.length === 0 && handles.length === 0) return null;
 
-  const { data, error } = await admin
-    .from("profiles")
-    .select("id")
-    .in("inbound_alias", aliases);
-  if (error) {
-    if (isSchemaNotReady(error.code)) return null;
-    throw error;
+  const matches: AliasMatch[] = [];
+
+  if (aliases.length > 0) {
+    const { data, error } = await admin.from("profiles").select("id").in("inbound_alias", aliases);
+    if (error) {
+      if (!isSchemaNotReady(error.code)) throw error;
+    } else if (data) {
+      matches.push(...data.map((row) => ({ userId: row.id, route: "alias" as const })));
+    }
   }
-  if (!data || data.length === 0) return null;
 
-  const distinctUserIds = Array.from(new Set(data.map((row) => row.id)));
+  if (handles.length > 0) {
+    const { data, error } = await admin.from("profiles").select("id").in("dream_handle", handles);
+    if (error) {
+      if (!isSchemaNotReady(error.code)) throw error;
+    } else if (data) {
+      matches.push(...data.map((row) => ({ userId: row.id, route: "dream" as const })));
+    }
+  }
+
+  if (matches.length === 0) return null;
+
+  const distinctUserIds = Array.from(new Set(matches.map((m) => m.userId)));
   if (distinctUserIds.length > 1) return "ambiguous";
-  return distinctUserIds[0];
+  return matches[0];
 }
 
 /** True if any recipient exactly matches a recognized legacy address. */
@@ -272,26 +304,20 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const admin = await createDreamcatcherAdminClient();
 
-    // --- New path: the email was sent to a personal Dream Catcher alias.
-    // Routing is by recipient (an unguessable capability), not by the
-    // spoofable From header — but the sender must still be a *verified*
-    // approved address for that specific user, or the email is ignored.
+    // --- New path: the email was sent to a personal Dream Catcher address
+    // (either route). Routing is by recipient, not by the spoofable From
+    // header — but the sender must still be a *verified* approved address
+    // for that specific user, or the email is ignored.
     const aliasResolution = await resolveUserByAlias(admin, recipients);
     if (aliasResolution === "ambiguous") {
-      console.warn("resend webhook: email addressed to more than one user's alias, ignoring");
+      console.warn("resend webhook: email addressed to more than one user's address, ignoring");
       return new Response(null, { status: 200 });
     }
     if (aliasResolution !== null) {
-      const userId = aliasResolution;
+      const { userId, route } = aliasResolution;
       const approved = await isApprovedSender(admin, userId, senderEmail);
       if (!approved) {
-        console.warn("resend webhook: sender is not a verified approved address for this alias");
-        return new Response(null, { status: 200 });
-      }
-
-      const workspaceId = await resolveWorkspaceId(admin, userId);
-      if (!workspaceId) {
-        console.warn("resend webhook: no workspace found for resolved user");
+        console.warn("resend webhook: sender is not a verified approved address for this user");
         return new Response(null, { status: 200 });
       }
 
@@ -303,7 +329,92 @@ export async function POST(request: Request): Promise<Response> {
         return new Response(null, { status: 200 });
       }
 
-      await insertCapture(admin, { workspaceId, userId, content, emailId });
+      if (route === "alias") {
+        // inbound_alias is a 128-bit unguessable capability — sender-match
+        // is an adequate trust boundary on its own, same as today.
+        const workspaceId = await resolveWorkspaceId(admin, userId);
+        if (!workspaceId) {
+          console.warn("resend webhook: no workspace found for resolved user");
+          return new Response(null, { status: 200 });
+        }
+        await insertCapture(admin, { workspaceId, userId, content, emailId });
+        return new Response(null, { status: 200 });
+      }
+
+      // route === "dream": the readable handle is guessable, so sender-match
+      // alone is not enough (see 20261101000000_dream_catcher_handles.sql).
+      // dream_capture_submit() only captures immediately for an already-
+      // confirmed sender; otherwise it holds the content and mints a
+      // confirmation token for us to email to the user's verified primary
+      // address — the real safeguard, since an attacker spoofing the sender
+      // can't read that inbox.
+      const submit = await admin.rpc("dream_capture_submit", {
+        p_user_id: userId,
+        p_sender_email: senderEmail,
+        p_source_external_id: emailId,
+        p_content: content,
+      });
+      if (submit.error) {
+        if (isSchemaNotReady(submit.error.code)) {
+          console.warn("resend webhook: dream_capture_submit not available yet, dropping");
+          return new Response(null, { status: 200 });
+        }
+        throw submit.error;
+      }
+
+      // dream_capture_submit() returns a status rather than raising for
+      // every expected outcome (see 20261101000000_dream_catcher_handles.sql
+      // for why — a raised exception would roll back its own internal
+      // cleanup delete). "captured", "duplicate_pending", "no_workspace",
+      // "not_approved", "no_verified_destination", and "rate_limited" all
+      // need no further action here — only "pending" does.
+      const submitData = submit.data as { status?: string; token?: string; confirm_to?: string } | null;
+      const status = submitData?.status;
+      switch (status) {
+        case "no_workspace":
+          console.warn("resend webhook: no workspace found for resolved user");
+          break;
+        case "not_approved":
+          // Defense-in-depth branch inside dream_capture_submit itself —
+          // shouldn't normally trigger, since isApprovedSender() above
+          // already gated this. Worth knowing about if it ever does.
+          console.warn("resend webhook: dream_capture_submit rejected a sender isApprovedSender had approved");
+          break;
+        case "no_verified_destination":
+          console.warn("resend webhook: user has no verified primary email to confirm to, dropping");
+          break;
+        case "rate_limited":
+          console.warn("resend webhook: dream-handle handshake rate limit hit, dropping");
+          break;
+        case "pending": {
+          // Sent only to the proven-owned primary_email_verified_email the
+          // RPC itself resolved — never the live auth.users.email (see the
+          // migration for why that distinction matters).
+          const token = submitData?.token;
+          const confirmTo = submitData?.confirm_to;
+          if (token && confirmTo) {
+            const { subject: confirmSubject, html: confirmHtml, text: confirmText } =
+              buildDreamCaptureConfirmEmail(senderEmail, token);
+            try {
+              await sendTransactionalEmail({
+                to: confirmTo,
+                subject: confirmSubject,
+                html: confirmHtml,
+                text: confirmText,
+              });
+            } catch (sendError) {
+              // The pending row already exists — this is a lost
+              // notification, not a lost capture. Nothing to retry here:
+              // the sender's next email (if any) will hit the same pending
+              // row via the unique index and won't send a duplicate either.
+              console.error("resend webhook: failed to send dream-capture confirmation email", sendError);
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
       return new Response(null, { status: 200 });
     }
 

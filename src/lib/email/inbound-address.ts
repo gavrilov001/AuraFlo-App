@@ -13,6 +13,23 @@ export function buildInboundAddress(alias: string): string {
 }
 
 /**
+ * The Resend receiving domain for readable per-user Dream Catcher handles
+ * (<handle>@this-domain, e.g. vlatko@dream.auraflo.com) — see
+ * supabase/migrations/20261101000000_dream_catcher_handles.sql. Separate
+ * from getInboundDomain(): that domain's addresses are unguessable random
+ * aliases, this domain's addresses are deliberately short and guessable,
+ * which is why the webhook applies an extra confirmation step only here.
+ */
+export function getDreamDomain(): string {
+  return process.env.NEXT_PUBLIC_DREAMCATCHER_DREAM_DOMAIN ?? "dream.auraflo.com";
+}
+
+/** Builds the full address a user gives out for their readable handle. */
+export function buildDreamAddress(handle: string): string {
+  return `${handle}@${getDreamDomain()}`;
+}
+
+/**
  * The original shared inbound address(es) the currently-working legacy
  * Email → Dream Catcher integration already receives mail at, routed
  * entirely by sender (From header) rather than by a personal alias. The
