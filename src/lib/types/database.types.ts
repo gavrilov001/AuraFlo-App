@@ -47,7 +47,6 @@ export interface Database {
           created_at: string;
           updated_at: string;
           // Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
-          inbound_alias: string;
           primary_email_verified_email: string | null;
           primary_email_verified_at: string | null;
           primary_email_verification_token_hash: string | null;
@@ -69,7 +68,6 @@ export interface Database {
           onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
-          inbound_alias?: string;
           primary_email_verified_email?: string | null;
           primary_email_verified_at?: string | null;
           primary_email_verification_token_hash?: string | null;
@@ -90,7 +88,6 @@ export interface Database {
           onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
-          inbound_alias?: string;
           primary_email_verified_email?: string | null;
           primary_email_verified_at?: string | null;
           primary_email_verification_token_hash?: string | null;
@@ -784,10 +781,6 @@ export interface Database {
         Returns: Json;
       };
       // Added by supabase/migrations/20261026120000_email_to_dreamcatcher.sql
-      inbound_alias_regenerate: {
-        Args: Record<string, never>;
-        Returns: Json;
-      };
       // service_role only — see the migration's comments on
       // primary_email_request_verification/sender_email_add/sender_email_resend
       // for why these take an explicit p_user_id instead of auth.uid() and

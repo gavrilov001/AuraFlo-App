@@ -193,22 +193,3 @@ export async function requestPrimaryEmailVerificationAction(): Promise<
     return actionError(toMessage(error, "We couldn't start verification."));
   }
 }
-
-export async function regenerateInboundAliasAction(): Promise<
-  ActionResult<{ inboundAlias: string }>
-> {
-  try {
-    await requireUser();
-    const supabase = await createClient();
-
-    const rpc = await supabase.rpc("inbound_alias_regenerate");
-    if (rpc.error) return actionError(mapRpcError(rpc.error));
-
-    const { inbound_alias: inboundAlias } = rpc.data as { inbound_alias: string };
-
-    revalidatePath("/app/settings");
-    return actionOk({ inboundAlias });
-  } catch (error) {
-    return actionError(toMessage(error, "We couldn't regenerate that address."));
-  }
-}

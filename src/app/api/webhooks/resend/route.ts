@@ -2,7 +2,7 @@ import { Webhook, WebhookVerificationError } from "svix";
 
 import { getDreamcatcherSecrets } from "@/lib/secrets/dreamcatcher";
 import { createDreamcatcherAdminClient } from "@/lib/supabase/dreamcatcher-admin";
-import { getInboundDomain, getDreamDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
+import { getDreamDomain, getLegacyInboundAddresses } from "@/lib/email/inbound-address";
 import { sendTransactionalEmail } from "@/lib/email/resend";
 import { buildDreamCaptureConfirmEmail } from "@/lib/email/verification-templates";
 
@@ -32,7 +32,7 @@ type AdminClient = Awaited<ReturnType<typeof createDreamcatcherAdminClient>>;
 // Postgres/PostgREST codes meaning "that table, column, or function doesn't
 // exist" — i.e. 20261026120000_email_to_dreamcatcher.sql and/or
 // 20261101000000_dream_catcher_handles.sql haven't been applied to this
-// database yet. Treated as "no alias schema available yet", never as a hard
+// database yet. Treated as "no handle schema available yet", never as a hard
 // failure, so the legacy from-header path keeps working for existing users
 // until the migration is applied, and deploy order between this app code
 // and either migration is never load-bearing.
@@ -111,30 +111,18 @@ function localPartForDomain(address: string, domain: string): string | null {
   return local;
 }
 
-type AliasMatch = { userId: string; route: "alias" | "dream" };
-
 /**
- * Resolves the single user addressed by this email's recipients, from
- * `received_for` (the addresses Resend actually routed to us) falling back
- * to `to` if that field is absent. Checks both the unguessable random-hex
- * `inbound_alias` (route "alias") and the readable, guessable `dream_handle`
- * (route "dream") — the two are deliberately on different domains so a
- * recipient can only ever match one of them. Returns null when neither
- * matched (caller falls back to the legacy from-header path) or when more
- * than one distinct user matched — an ambiguous email is never routed,
+ * Resolves the single user whose dream_handle appears among this email's
+ * recipients, from `received_for` (the addresses Resend actually routed to
+ * us) falling back to `to` if that field is absent. Returns null when no
+ * handle matched (caller falls back to the legacy from-header path) or when
+ * more than one distinct user matched — an ambiguous email is never routed,
  * rather than guessing and risking a cross-account delivery.
  */
-async function resolveUserByAlias(
+async function resolveUserByDreamHandle(
   admin: AdminClient,
   recipients: string[],
-): Promise<AliasMatch | null | "ambiguous"> {
-  const aliases = Array.from(
-    new Set(
-      recipients
-        .map((r) => localPartForDomain(r, getInboundDomain()))
-        .filter((a): a is string => a !== null),
-    ),
-  );
+): Promise<string | null | "ambiguous"> {
   const handles = Array.from(
     new Set(
       recipients
@@ -142,33 +130,18 @@ async function resolveUserByAlias(
         .filter((a): a is string => a !== null),
     ),
   );
-  if (aliases.length === 0 && handles.length === 0) return null;
+  if (handles.length === 0) return null;
 
-  const matches: AliasMatch[] = [];
-
-  if (aliases.length > 0) {
-    const { data, error } = await admin.from("profiles").select("id").in("inbound_alias", aliases);
-    if (error) {
-      if (!isSchemaNotReady(error.code)) throw error;
-    } else if (data) {
-      matches.push(...data.map((row) => ({ userId: row.id, route: "alias" as const })));
-    }
+  const { data, error } = await admin.from("profiles").select("id").in("dream_handle", handles);
+  if (error) {
+    if (isSchemaNotReady(error.code)) return null;
+    throw error;
   }
+  if (!data || data.length === 0) return null;
 
-  if (handles.length > 0) {
-    const { data, error } = await admin.from("profiles").select("id").in("dream_handle", handles);
-    if (error) {
-      if (!isSchemaNotReady(error.code)) throw error;
-    } else if (data) {
-      matches.push(...data.map((row) => ({ userId: row.id, route: "dream" as const })));
-    }
-  }
-
-  if (matches.length === 0) return null;
-
-  const distinctUserIds = Array.from(new Set(matches.map((m) => m.userId)));
+  const distinctUserIds = Array.from(new Set(data.map((row) => row.id)));
   if (distinctUserIds.length > 1) return "ambiguous";
-  return matches[0];
+  return distinctUserIds[0];
 }
 
 /** True if any recipient exactly matches a recognized legacy address. */
@@ -184,7 +157,7 @@ function recipientsIncludeLegacyAddress(recipients: string[]): boolean {
  * confirmation is disabled for this project and auth.users.email alone is
  * not proof of ownership) or a verified row in user_sender_emails. Resend's
  * webhook/API does not expose SPF/DKIM/DMARC verdicts, so this check is the
- * entire trust boundary for the alias-routed path — the From header itself
+ * entire trust boundary for the handle-routed path — the From header itself
  * is still just a claim, which is why it must match a verified record.
  */
 async function isApprovedSender(
@@ -304,17 +277,23 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const admin = await createDreamcatcherAdminClient();
 
-    // --- New path: the email was sent to a personal Dream Catcher address
-    // (either route). Routing is by recipient, not by the spoofable From
+    // --- New path: the email was sent to a personal, readable Dream
+    // Catcher handle. Routing is by recipient, not by the spoofable From
     // header — but the sender must still be a *verified* approved address
-    // for that specific user, or the email is ignored.
-    const aliasResolution = await resolveUserByAlias(admin, recipients);
-    if (aliasResolution === "ambiguous") {
-      console.warn("resend webhook: email addressed to more than one user's address, ignoring");
+    // for that specific user, or the email is ignored. The handle is
+    // guessable, so sender-match alone isn't enough on its own (see
+    // 20261101000000_dream_catcher_handles.sql) — dream_capture_submit()
+    // only captures immediately for an already-confirmed sender; otherwise
+    // it holds the content and mints a confirmation token for us to email
+    // to the user's verified primary address, since an attacker spoofing
+    // the sender can't read that inbox.
+    const handleResolution = await resolveUserByDreamHandle(admin, recipients);
+    if (handleResolution === "ambiguous") {
+      console.warn("resend webhook: email addressed to more than one user's handle, ignoring");
       return new Response(null, { status: 200 });
     }
-    if (aliasResolution !== null) {
-      const { userId, route } = aliasResolution;
+    if (handleResolution !== null) {
+      const userId = handleResolution;
       const approved = await isApprovedSender(admin, userId, senderEmail);
       if (!approved) {
         console.warn("resend webhook: sender is not a verified approved address for this user");
@@ -329,25 +308,6 @@ export async function POST(request: Request): Promise<Response> {
         return new Response(null, { status: 200 });
       }
 
-      if (route === "alias") {
-        // inbound_alias is a 128-bit unguessable capability — sender-match
-        // is an adequate trust boundary on its own, same as today.
-        const workspaceId = await resolveWorkspaceId(admin, userId);
-        if (!workspaceId) {
-          console.warn("resend webhook: no workspace found for resolved user");
-          return new Response(null, { status: 200 });
-        }
-        await insertCapture(admin, { workspaceId, userId, content, emailId });
-        return new Response(null, { status: 200 });
-      }
-
-      // route === "dream": the readable handle is guessable, so sender-match
-      // alone is not enough (see 20261101000000_dream_catcher_handles.sql).
-      // dream_capture_submit() only captures immediately for an already-
-      // confirmed sender; otherwise it holds the content and mints a
-      // confirmation token for us to email to the user's verified primary
-      // address — the real safeguard, since an attacker spoofing the sender
-      // can't read that inbox.
       const submit = await admin.rpc("dream_capture_submit", {
         p_user_id: userId,
         p_sender_email: senderEmail,
@@ -421,14 +381,12 @@ export async function POST(request: Request): Promise<Response> {
     // --- Legacy path: allowed ONLY when a recipient is an exact match for
     // one of the explicitly recognized legacy addresses
     // (getLegacyInboundAddresses()) — never merely because no personal
-    // alias matched. An unknown, malformed, or revoked personal-alias-shaped
-    // address must be dropped here, not silently fall through to spoofable
-    // sender-only routing. This is the one path that still trusts the From
-    // header alone — preserved so the already-working legacy integration
-    // isn't broken by this rollout; see the architecture report for that
-    // tradeoff.
+    // handle matched. An unknown or malformed handle-shaped address must be
+    // dropped here, not silently fall through to spoofable sender-only
+    // routing. This is the one path that still trusts the From header alone
+    // — preserved deliberately, per 20261026120000_email_to_dreamcatcher.sql.
     if (!recipientsIncludeLegacyAddress(recipients)) {
-      console.warn("resend webhook: recipient matched no known alias or legacy address, ignoring");
+      console.warn("resend webhook: recipient matched no known handle or legacy address, ignoring");
       return new Response(null, { status: 200 });
     }
 

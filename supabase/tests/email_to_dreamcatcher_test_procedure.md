@@ -1,5 +1,16 @@
 # Email to Dream Catcher — verification procedure
 
+**Obsolete as of `20261102000000_remove_legacy_inbound_alias.sql`:** section
+5 (`inbound_alias_regenerate`) and section 6's cases 1–5 and 9, which test
+routing via `profiles.inbound_alias` — that column, its RPC, and every
+stored value are gone once that migration is applied. Section 6's cases 6–8
+(the legacy shared `dream@inbound.auraflo.com` address, idempotency, and
+malformed-recipient handling) are unaffected and still apply. Everything
+about the readable `dream_handle` address added by
+`20261101000000_dream_catcher_handles.sql` was instead verified directly
+against a disposable local Postgres sandbox during that change's own review
+— see that migration's header for what was covered.
+
 This procedure is intentionally not executed by the repository checks. Run it
 against a disposable local Supabase database or a dedicated staging project
 after applying `20261026120000_email_to_dreamcatcher.sql` on top of every

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { requireWorkspaceContext } from "@/lib/auth/context";
 import { createClient } from "@/lib/supabase/server";
 import { listTimeZones } from "@/lib/utils/timezones";
-import { buildInboundAddress, buildDreamAddress } from "@/lib/email/inbound-address";
+import { buildDreamAddress } from "@/lib/email/inbound-address";
 import type { SenderEmailSummary } from "@/lib/types/database.types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LogoutButton } from "@/components/app-shell/LogoutButton";
@@ -38,7 +38,7 @@ export default async function SettingsPage() {
   const timezones = listTimeZones();
   const canEditWorkspace = role === "owner" || role === "admin";
 
-  // user_sender_emails / profiles.inbound_alias only exist once
+  // user_sender_emails only exists once
   // supabase/migrations/20261026120000_email_to_dreamcatcher.sql has been
   // applied. Until then, degrade to a "coming soon" state instead of
   // breaking the rest of Settings for existing users.
@@ -50,7 +50,7 @@ export default async function SettingsPage() {
     .from("user_sender_emails")
     .select("id, email, status, created_at")
     .order("created_at", { ascending: true });
-  const emailToDreamcatcherAvailable = !sendersRes.error && Boolean(profile.inbound_alias);
+  const emailToDreamcatcherAvailable = !sendersRes.error;
   const senderEmails: SenderEmailSummary[] = sendersRes.error ? [] : sendersRes.data ?? [];
   // dream_handle (20261101000000_dream_catcher_handles.sql) is a separate,
   // later migration from the rest of Email to Dream Catcher — degrade this
@@ -84,7 +84,6 @@ export default async function SettingsPage() {
                 profile.primary_email_verified_at != null &&
                 profile.primary_email_verified_email === (user.email ?? "").toLowerCase()
               }
-              inboundAddress={buildInboundAddress(profile.inbound_alias)}
               dreamAddress={dreamAddress}
               initialSenderEmails={senderEmails}
             />

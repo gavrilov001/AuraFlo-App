@@ -53,7 +53,7 @@ async function emailToDreamcatcherAvailable(page: Page): Promise<boolean> {
 
 /**
  * supabase/migrations/20261026120000_email_to_dreamcatcher.sql adds the
- * schema this section depends on (user_sender_emails, profiles.inbound_alias,
+ * schema this section depends on (user_sender_emails,
  * primary_email_verified_*). Until that migration is applied to whatever
  * database these tests run against, the Settings page degrades to the
  * "Not set up" message instead of rendering the section — this file's first
@@ -62,6 +62,13 @@ async function emailToDreamcatcherAvailable(page: Page): Promise<boolean> {
  * the post-migration UI and will fail with a clear assertion message
  * ("Not set up on this environment yet." visible) rather than a timeout if
  * run before that.
+ *
+ * The random-hex per-user inbound_alias address (and its Regenerate button)
+ * that used to also live in this section was decommissioned by
+ * 20261102000000_remove_legacy_inbound_alias.sql — the readable
+ * dream_handle address from 20261101000000_dream_catcher_handles.sql is now
+ * the only personal address shown here, so there is exactly one `<code>`
+ * element in this section, not two.
  *
  * Verifying an address (clicking the emailed link) can't be driven through
  * the UI without a real inbox — that path is covered by the RPC-level
@@ -83,25 +90,32 @@ test.describe("Settings — Email to Dream Catcher", () => {
     await expect(notSetUp.or(addressCode.first())).toBeVisible();
   });
 
-  test("shows the primary email, a copyable inbound address, and Pending primary status", async ({
+  test("shows the primary email, a copyable dream_handle address, and Pending primary status", async ({
     page,
   }) => {
     const owner = await signUpFresh(page);
     await page.goto("/app/settings");
 
-    const section = page.getByRole("heading", { name: "Email to Dream Catcher" }).locator("..");
+    // The <section> wrapper, not just the heading's own title/description
+    // div — Section() renders `<section><div>h2+p</div><div>{children}</div></section>`,
+    // so `.locator("..")` from the heading lands one level too shallow to
+    // reach the children div at all.
+    const section = page
+      .getByRole("heading", { name: "Email to Dream Catcher" })
+      .locator("xpath=ancestor::section[1]");
     test.skip(
       !(await emailToDreamcatcherAvailable(page)),
       "Requires supabase/migrations/20261026120000_email_to_dreamcatcher.sql applied.",
     );
 
-    await expect(page.getByText(owner.email)).toBeVisible();
+    // Scoped to the section rather than a bare getByText(email) — the page
+    // header's "Signed in as <email>" subtitle contains the same text,
+    // which would otherwise make this ambiguous.
+    await expect(section.getByText(owner.email, { exact: true })).toBeVisible();
     await expect(page.getByText("Primary")).toBeVisible();
     // A brand-new account's primary email has never been verified.
     await expect(section.getByText("Pending").first()).toBeVisible();
-    // .first(): once 20261101000000_dream_catcher_handles.sql is applied,
-    // a second <code> (the readable dream_handle address) also renders.
-    await expect(page.locator("code").first()).toContainText("@");
+    await expect(page.locator("code")).toContainText("@");
   });
 
   test("adding an address shows it as Pending and sends a verification email", async ({ page }) => {
@@ -205,7 +219,7 @@ test.describe("Settings — Email to Dream Catcher", () => {
     await expect(page.getByText(additional)).not.toBeVisible();
   });
 
-  test("regenerating the inbound address changes it and warns the old one stops working", async ({
+  test("there is no Regenerate option for the dream_handle address (it's permanent)", async ({
     page,
   }) => {
     await signUpFresh(page);
@@ -215,18 +229,7 @@ test.describe("Settings — Email to Dream Catcher", () => {
       "Requires supabase/migrations/20261026120000_email_to_dreamcatcher.sql applied.",
     );
 
-    // Scoped to the Regenerate button's own row rather than "the first
-    // <code> on the page" — once 20261101000000_dream_catcher_handles.sql is
-    // applied, a second <code> (the readable, non-regenerable dream_handle
-    // address) renders above this one.
-    const regenerateButton = page.getByRole("button", { name: /Regenerate/ });
-    const addressRow = regenerateButton.locator("..");
-    const before = await addressRow.locator("code").textContent();
-    await regenerateButton.click();
-    await page.getByRole("dialog").getByRole("button", { name: "Regenerate" }).click();
-
-    await expect(page.getByText(/no longer works/i)).toBeVisible({ timeout: 10_000 });
-    await expect(addressRow.locator("code")).not.toHaveText(before ?? "");
+    await expect(page.getByRole("button", { name: /Regenerate/ })).not.toBeVisible();
   });
 
   test("a direct RPC call cannot retrieve a verification token (trust-boundary security regression)", async ({

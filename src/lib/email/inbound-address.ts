@@ -1,24 +1,23 @@
 /**
  * The Resend receiving domain confirmed operational for Dream Catcher
  * inbound email (MX verified). Overridable per-environment since a
- * local/staging setup won't share production's receiving domain.
+ * local/staging setup won't share production's receiving domain. The
+ * per-user random-hex inbound_alias this domain used to serve is gone
+ * (decommissioned in favor of the readable dream_handle below) — this
+ * domain now exists only to host the legacy shared
+ * dream@<this-domain> address (getLegacyInboundAddresses()).
  */
 export function getInboundDomain(): string {
   return process.env.NEXT_PUBLIC_DREAMCATCHER_INBOUND_DOMAIN ?? "inbound.auraflo.com";
 }
 
-/** Builds the full address a user forwards/sends mail to for their alias. */
-export function buildInboundAddress(alias: string): string {
-  return `${alias}@${getInboundDomain()}`;
-}
-
 /**
  * The Resend receiving domain for readable per-user Dream Catcher handles
  * (<handle>@this-domain, e.g. vlatko@dream.auraflo.com) — see
- * supabase/migrations/20261101000000_dream_catcher_handles.sql. Separate
- * from getInboundDomain(): that domain's addresses are unguessable random
- * aliases, this domain's addresses are deliberately short and guessable,
- * which is why the webhook applies an extra confirmation step only here.
+ * supabase/migrations/20261101000000_dream_catcher_handles.sql. This
+ * domain's addresses are deliberately short and guessable (unlike a
+ * capability-style random token), which is why the webhook applies an
+ * extra sender-confirmation step to mail addressed here.
  */
 export function getDreamDomain(): string {
   return process.env.NEXT_PUBLIC_DREAMCATCHER_DREAM_DOMAIN ?? "dream.auraflo.com";

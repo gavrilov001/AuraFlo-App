@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, RotateCcw } from "lucide-react";
+import { Copy } from "lucide-react";
 
 import type { SenderEmailSummary } from "@/lib/types/database.types";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +13,6 @@ import { useToast } from "@/components/ui/Toast";
 import {
   addSenderEmailAction,
   removeSenderEmailAction,
-  regenerateInboundAliasAction,
   requestPrimaryEmailVerificationAction,
   resendSenderEmailVerificationAction,
 } from "./sender-emails-actions";
@@ -31,24 +30,20 @@ function StatusBadge({ verified }: { verified: boolean }) {
 export function SenderEmailsSection({
   primaryEmail,
   primaryVerified,
-  inboundAddress,
   dreamAddress,
   initialSenderEmails,
 }: {
   primaryEmail: string;
   primaryVerified: boolean;
-  inboundAddress: string;
   dreamAddress: string | null;
   initialSenderEmails: SenderEmailSummary[];
 }) {
   const toast = useToast();
   const [senderEmails, setSenderEmails] = useState(initialSenderEmails);
-  const [address, setAddress] = useState(inboundAddress);
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | undefined>();
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
 
@@ -59,13 +54,6 @@ export function SenderEmailsSection({
       else next.delete(id);
       return next;
     });
-
-  function copyAddress() {
-    void navigator.clipboard
-      .writeText(address)
-      .then(() => toast.success("Address copied."))
-      .catch(() => toast.error("Couldn't copy to clipboard."));
-  }
 
   function copyDreamAddress() {
     if (!dreamAddress) return;
@@ -157,23 +145,6 @@ export function SenderEmailsSection({
     });
   }
 
-  function handleRegenerate() {
-    setConfirmRegenerate(false);
-    startTransition(() => {
-      void regenerateInboundAliasAction().then((r) => {
-        if (!r.ok) {
-          toast.error(r.error);
-          return;
-        }
-        setAddress((prev) => {
-          const domain = prev.split("@")[1] ?? "";
-          return `${r.data.inboundAlias}@${domain}`;
-        });
-        toast.success("Your Dream Catcher address was regenerated. The old one no longer works.");
-      });
-    });
-  }
-
   const atLimit = senderEmails.length >= MAX_ADDITIONAL;
 
   return (
@@ -198,33 +169,6 @@ export function SenderEmailsSection({
       )}
 
       <div className={`flex flex-col gap-1.5 ${dreamAddress ? "border-t border-line-soft pt-5" : ""}`}>
-        <p className="text-sm font-medium text-ink">
-          {dreamAddress ? "Legacy Dream Catcher address" : "Your Dream Catcher address"}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="rounded-md border border-line bg-surface-soft px-2.5 py-1.5 text-[13px] text-body">
-            {address}
-          </code>
-          <Button variant="secondary" size="sm" onClick={copyAddress}>
-            <Copy aria-hidden className="size-3.5" />
-            Copy
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmRegenerate(true)}
-          >
-            <RotateCcw aria-hidden className="size-3.5" />
-            Regenerate
-          </Button>
-        </div>
-        <p className="text-[13px] text-muted">
-          Send or forward an email here from any verified address below to add it to
-          your Dream Catcher inbox. Regenerating revokes the old address immediately.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-1.5 border-t border-line-soft pt-5">
         <p className="text-sm font-medium text-ink">Approved sender addresses</p>
 
         <div className="flex items-center justify-between gap-3 py-1.5">
@@ -317,16 +261,6 @@ export function SenderEmailsSection({
         destructive
         onConfirm={() => confirmRemoveId && handleRemove(confirmRemoveId)}
         onCancel={() => setConfirmRemoveId(null)}
-      />
-
-      <ConfirmDialog
-        open={confirmRegenerate}
-        title="Regenerate your Dream Catcher address?"
-        description="Your current address will stop working immediately. Update anywhere you've saved it."
-        confirmLabel="Regenerate"
-        destructive
-        onConfirm={handleRegenerate}
-        onCancel={() => setConfirmRegenerate(false)}
       />
     </div>
   );
