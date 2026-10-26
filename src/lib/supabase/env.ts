@@ -4,8 +4,16 @@
  * secret key must never be imported into application code.
  */
 
-function readEnv(name: string): string {
-  const value = process.env[name];
+// Next.js inlines NEXT_PUBLIC_* vars into client bundles only where it can
+// statically see the literal `process.env.NEXT_PUBLIC_X` form — a dynamic
+// `process.env[name]` lookup (the previous shape of this helper) can't be
+// replaced that way, so it silently read `undefined` in any client bundle,
+// never in server code (where process.env is the real runtime environment,
+// not a build-time replacement). Unnoticed until src/app/app/capture/
+// CaptureBoard.tsx became the first client component to import this module.
+// Each call site below passes its own already-dereferenced
+// `process.env.NEXT_PUBLIC_X` literal so the bundler can still inline it.
+function readEnv(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Missing environment variable ${name}. Add it to .env.local (see .env.example).`,
@@ -14,9 +22,13 @@ function readEnv(name: string): string {
   return value;
 }
 
-export const SUPABASE_URL = readEnv("NEXT_PUBLIC_SUPABASE_URL");
+export const SUPABASE_URL = readEnv(
+  "NEXT_PUBLIC_SUPABASE_URL",
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+);
 export const SUPABASE_PUBLISHABLE_KEY = readEnv(
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 );
 
 /**

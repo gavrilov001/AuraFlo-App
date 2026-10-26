@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, Trash2 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { NavTabs } from "@/components/ui/NavTabs";
 import { EmptyState } from "@/components/ui/Surface";
@@ -69,6 +70,7 @@ export function CaptureBoard({
   focusItems,
   timezone,
   params,
+  workspaceId,
 }: {
   result: CaptureListResult;
   counts: CaptureCounts;
@@ -76,6 +78,7 @@ export function CaptureBoard({
   focusItems: FocusOption[];
   timezone: string;
   params: ListCapturesInput;
+  workspaceId: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -97,6 +100,44 @@ export function CaptureBoard({
       router.refresh();
     }, 650);
   }, [router]);
+
+  // --- realtime: live-update the Inbox when new captures land ---------
+  // Only the inbox tab subscribes — every capture (email or manual) is
+  // created with status "inbox", so processed/archived/discarded never need
+  // a live feed. Workspace isolation is enforced by Postgres itself: the
+  // browser client below carries the signed-in user's session, and the
+  // existing captures_select_member RLS policy (supabase_initial_schema.sql)
+  // governs which rows this subscription can ever receive — the `filter`
+  // here is an efficiency narrowing, not the security boundary. Reuses
+  // scheduleRefresh so a realtime INSERT and this tab's own optimistic
+  // create (which already calls scheduleRefresh on success) collapse into
+  // one debounced router.refresh() instead of double-fetching.
+  const supabase = useMemo(() => createClient(), []);
+  useEffect(() => {
+    if (filter !== "inbox") return;
+
+    const channel = supabase
+      .channel(`captures-inbox-${workspaceId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "captures",
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        (payload) => {
+          const row = payload.new as { status?: string } | null;
+          if (row?.status !== "inbox") return;
+          scheduleRefresh();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [filter, workspaceId, supabase, scheduleRefresh]);
 
   function handleCapture(
     input: CaptureInput,

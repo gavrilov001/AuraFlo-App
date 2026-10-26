@@ -41,6 +41,37 @@ function isSchemaNotReady(code: string | undefined | null): boolean {
   return code != null && SCHEMA_NOT_READY.has(code);
 }
 
+// Structured timing logs, correlated by Resend's own email_id (never a
+// sender/recipient address, subject, or body — see module header). Each
+// line is independently greppable/joinable in CloudWatch Logs Insights by
+// `email_id`. `console.log`/`console.warn` land in the Amplify SSR compute
+// function's stdout, which CloudWatch tails automatically.
+function logTiming(
+  event: string,
+  emailId: string,
+  extra: Record<string, number | string | boolean> = {},
+): void {
+  console.log(JSON.stringify({ event, email_id: emailId, ts: new Date().toISOString(), ...extra }));
+}
+
+/**
+ * Logs the final "responded" timing line (skipped when `context` is absent,
+ * i.e. for failures before an email_id/start time exist — signature
+ * verification, malformed JSON, missing fields) and returns the Response.
+ * Centralizing this means every exit point after the timer starts reports
+ * the same total_duration_ms/http_status shape, with nothing to keep in
+ * sync by hand across the many early-return branches below.
+ */
+function respond(status: number, context?: { emailId: string; t0: number }): Response {
+  if (context) {
+    logTiming("resend_webhook.responded", context.emailId, {
+      total_duration_ms: Date.now() - context.t0,
+      http_status: status,
+    });
+  }
+  return new Response(null, { status });
+}
+
 function extractEmailAddress(from: string): string {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1] : from).trim().toLowerCase();
@@ -164,11 +195,29 @@ async function isApprovedSender(
   userId: string,
   senderEmail: string,
 ): Promise<boolean> {
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .select("primary_email_verified_email, primary_email_verified_at")
-    .eq("id", userId)
-    .maybeSingle();
+  // These two reads are independent (different tables, neither depends on
+  // the other's result) — running them concurrently means the common case
+  // (approved via primary email) pays for the unused user_sender_emails
+  // query, but in parallel, not in sequence, so it never adds wall-clock
+  // time. Only the conditional getUserById() below has a real dependency
+  // (it only runs to double-check a primary-email match) and stays awaited
+  // on its own.
+  const [profileResult, senderResult] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("primary_email_verified_email, primary_email_verified_at")
+      .eq("id", userId)
+      .maybeSingle(),
+    admin
+      .from("user_sender_emails")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("email_normalized", senderEmail)
+      .eq("status", "verified")
+      .maybeSingle(),
+  ]);
+
+  const { data: profile, error: profileError } = profileResult;
   if (profileError) {
     if (isSchemaNotReady(profileError.code)) return false;
     throw profileError;
@@ -188,13 +237,7 @@ async function isApprovedSender(
     }
   }
 
-  const { data: sender, error: senderError } = await admin
-    .from("user_sender_emails")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("email_normalized", senderEmail)
-    .eq("status", "verified")
-    .maybeSingle();
+  const { data: sender, error: senderError } = senderResult;
   if (senderError) {
     if (isSchemaNotReady(senderError.code)) return false;
     throw senderError;
@@ -273,6 +316,10 @@ export async function POST(request: Request): Promise<Response> {
     ...(Array.isArray(payload.data.to) ? payload.data.to : []),
   ];
 
+  const t0 = Date.now();
+  const timing = { emailId, t0 };
+  logTiming("resend_webhook.received", emailId);
+
   try {
     const admin = await createDreamcatcherAdminClient();
 
@@ -290,24 +337,43 @@ export async function POST(request: Request): Promise<Response> {
     const handleResolution = await resolveUserByDreamHandle(admin, recipients);
     if (handleResolution === "ambiguous") {
       console.warn("resend webhook: email addressed to more than one user's handle, ignoring");
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
     if (handleResolution !== null) {
       const userId = handleResolution;
+
+      const tVerify = Date.now();
       const approved = await isApprovedSender(admin, userId, senderEmail);
+      logTiming("resend_webhook.sender_verified", emailId, {
+        duration_ms: Date.now() - tVerify,
+        approved,
+      });
       if (!approved) {
+        // Deliberately NOT fetching the email body before this check. The
+        // content fetch and the sender-approval check are logically
+        // independent (fetchReceivedEmail only needs emailId), so they
+        // could run concurrently — but doing so would mean every spoofed or
+        // guessed-handle delivery, approved or not, costs a Resend API call
+        // and briefly holds the decoded body in memory before being
+        // discarded. Given isApprovedSender() is this route's entire trust
+        // boundary (see 20261103000000_dream_capture_direct_insert.sql's
+        // REMAINING RISK note), that tradeoff isn't worth a few tens of ms:
+        // an unapproved sender's message content is never fetched at all.
         console.warn("resend webhook: sender is not a verified approved address for this user");
-        return new Response(null, { status: 200 });
+        return respond(200, timing);
       }
 
+      const tFetch = Date.now();
       const { text, html } = await fetchReceivedEmail(emailId, secrets.resendApiKey);
+      logTiming("resend_webhook.content_fetched", emailId, { duration_ms: Date.now() - tFetch });
       const body = text ?? (html ? htmlToPlainText(html) : null);
       const content = buildCaptureContent(subject, body);
       if (!content) {
         console.warn("resend webhook: email had no usable subject or body, skipping");
-        return new Response(null, { status: 200 });
+        return respond(200, timing);
       }
 
+      const tInsert = Date.now();
       const insert = await admin.rpc("dream_capture_insert", {
         p_user_id: userId,
         p_sender_email: senderEmail,
@@ -317,7 +383,7 @@ export async function POST(request: Request): Promise<Response> {
       if (insert.error) {
         if (isSchemaNotReady(insert.error.code)) {
           console.warn("resend webhook: dream_capture_insert not available yet, dropping");
-          return new Response(null, { status: 200 });
+          return respond(200, timing);
         }
         throw insert.error;
       }
@@ -326,6 +392,10 @@ export async function POST(request: Request): Promise<Response> {
       // every expected outcome — "captured" (new or a deduped retry) needs
       // no further action; the rest are drops, logged for visibility.
       const status = (insert.data as { status?: string } | null)?.status;
+      logTiming("resend_webhook.capture_inserted", emailId, {
+        duration_ms: Date.now() - tInsert,
+        status: status ?? "unknown",
+      });
       switch (status) {
         case "no_workspace":
           console.warn("resend webhook: no workspace found for resolved user");
@@ -342,7 +412,7 @@ export async function POST(request: Request): Promise<Response> {
         default:
           break;
       }
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
 
     // --- Legacy path: allowed ONLY when a recipient is an exact match for
@@ -354,33 +424,58 @@ export async function POST(request: Request): Promise<Response> {
     // — preserved deliberately, per 20261026120000_email_to_dreamcatcher.sql.
     if (!recipientsIncludeLegacyAddress(recipients)) {
       console.warn("resend webhook: recipient matched no known handle or legacy address, ignoring");
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
 
+    const tVerify = Date.now();
     const userId = await findUserIdByEmail(admin, senderEmail);
+    logTiming("resend_webhook.sender_verified", emailId, {
+      duration_ms: Date.now() - tVerify,
+      approved: userId !== null,
+    });
     if (!userId) {
+      // Same reasoning as the handle-route branch above: the sender's
+      // identity (hence any right to have their content fetched) isn't
+      // established until findUserIdByEmail resolves a real AuraFlo user,
+      // so the Resend content fetch below never starts for an unmatched
+      // sender.
       console.warn("resend webhook: no AuraFlo user found for sender");
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
 
-    const workspaceId = await resolveWorkspaceId(admin, userId);
+    // The sender is now a confirmed existing user — unlike the fetch
+    // itself, resolving their workspace isn't a trust decision (it can
+    // only ever be "this exact user's own workspace" or missing), so it's
+    // safe to run concurrently with the Resend content fetch rather than
+    // gating it. Content is simply discarded below if no workspace turns up.
+    const tFetch = Date.now();
+    const [workspaceId, fetched] = await Promise.all([
+      resolveWorkspaceId(admin, userId),
+      fetchReceivedEmail(emailId, secrets.resendApiKey),
+    ]);
+    logTiming("resend_webhook.content_fetched", emailId, { duration_ms: Date.now() - tFetch });
     if (!workspaceId) {
       console.warn("resend webhook: no workspace found for resolved user");
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
 
-    const { text, html } = await fetchReceivedEmail(emailId, secrets.resendApiKey);
+    const { text, html } = fetched;
     const body = text ?? (html ? htmlToPlainText(html) : null);
     const content = buildCaptureContent(subject, body);
     if (!content) {
       console.warn("resend webhook: email had no usable subject or body, skipping");
-      return new Response(null, { status: 200 });
+      return respond(200, timing);
     }
 
-    await insertCapture(admin, { workspaceId, userId, content, emailId });
-    return new Response(null, { status: 200 });
+    const tInsert = Date.now();
+    const insertStatus = await insertCapture(admin, { workspaceId, userId, content, emailId });
+    logTiming("resend_webhook.capture_inserted", emailId, {
+      duration_ms: Date.now() - tInsert,
+      status: insertStatus,
+    });
+    return respond(200, timing);
   } catch (error) {
     console.error("resend webhook: failed to process email.received", error);
-    return new Response(null, { status: 500 });
+    return respond(500, timing);
   }
 }

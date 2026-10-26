@@ -47,6 +47,7 @@ export default async function CapturePage({
         focusItems={focusItems}
         timezone={profile.timezone}
         params={params}
+        workspaceId={workspace.id}
       />
     </div>
   );
